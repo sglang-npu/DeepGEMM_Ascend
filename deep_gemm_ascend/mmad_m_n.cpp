@@ -1,7 +1,7 @@
 #include "kernel_operator.h"
 
-#define CUBE_BLOCK 16 // 什么意思
-#define CUBE_BLOCK_SIZE 256 // 什么意思
+#define CUBE_BLOCK 16 
+#define CUBE_BLOCK_SIZE 256 
 
 __aicore__ inline uint32_t CeilCubeBlock(uint32_t len) 
 {
