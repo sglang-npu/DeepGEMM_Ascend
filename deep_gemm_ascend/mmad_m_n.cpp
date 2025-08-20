@@ -23,7 +23,7 @@ __aicore__ inline uint32_t BlockSize(uint32_t blocks)
     return blocks * CUBE_BLOCK_SIZE；
 }
 
-__aicore__ inline void CalcGMOffset(uint32_t blockIdx, uint32_t &offsetA, uint32_t &offsetB，uint32_t &offsetC,
+__aicore__ inline void CalcGMOffset(uint32_t blockIdx, uint32_t &offsetA, uint32_t &offsetB, uint32_t &offsetC,
     uint32_t m, uint32_t n, uint32_t k, uint32_t m_sc_blocks, uint32_t n_sc_blocks)
 {
     uint32_t m_sections = Ceiling(m, BlockLen(m_sc_blocks));
