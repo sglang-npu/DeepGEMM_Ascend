@@ -14,7 +14,7 @@ from torch_npu.testing.testcase import TestCase, run_tests
 import sys, os
 
 sys.path.append(os.getcwd())
-print(os.getcwd)
+print('lt cur path: ',os.getcwd)
 import deep_gemm_cpp
 println('lt get dga module path', deep_gemm_cpp.__file__)
 
@@ -36,8 +36,8 @@ class TestCustomAdd(TestCase):
         z_npu = z.npu()
         deep_gemm_cpp.run_mmad_custom(x_npu, y_npu, z_npu)
         cpuout = x.float() @ y.float()
-        print(f"{cpuout=}")
-        print(f"{z_npu=}")
+        print(f"cpu_out: {cpuout=}")
+        print(f"npu_out: {z_npu=}")
 
 
 if __name__ == "__main__":
