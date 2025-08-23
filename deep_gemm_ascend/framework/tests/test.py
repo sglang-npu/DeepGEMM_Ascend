@@ -50,8 +50,8 @@ class TestCustomAdd(TestCase):
         z = torch.empty(length_z, device='cpu', dtype=torch.float16)
 
         bin_path = os.environ.get("KERNEL_BIN_PATH")
-        if not bin_path:
-            assert False
+        print("lt bin path", bin_path)
+        assert bin_path is not None ， "The env of KERNEL_BIN_PATH is not set, please set bin path"
 
         x_npu = x.npu()
         y_npu = y.npu()
