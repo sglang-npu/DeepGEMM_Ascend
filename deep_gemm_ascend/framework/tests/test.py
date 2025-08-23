@@ -51,7 +51,7 @@ class TestCustomAdd(TestCase):
 
         bin_path = os.environ.get("KERNEL_BIN_PATH")
         print("lt bin path", bin_path)
-        assert bin_path is not None ， "The env of KERNEL_BIN_PATH is not set, please set bin path"
+        assert bin_path is not None, "The env of KERNEL_BIN_PATH is not set, please set bin path"
 
         x_npu = x.npu()
         y_npu = y.npu()
