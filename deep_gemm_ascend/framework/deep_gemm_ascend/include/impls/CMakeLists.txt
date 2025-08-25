@@ -24,7 +24,7 @@ include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
 
 # ascendc_library use to add kernel file to generate ascendc library
 set(KERNEL_SRC_PATH
-  "${CMAKE_CURRENT_SOURCE_DIR}/mmad_m_n.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/mmad.cpp"
   CACHE PATH
   "Path for dynamic mmad kernel file."
 )
