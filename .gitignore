@@ -1,10 +1,3 @@
-<<<<<<< HEAD
-.vscode
-*.so
-deep_gemm_ascend/doc/personal.md
-deep_gemm_ascend/doc/abc.md
-=======
 *.so
 .vscode/
 deep_gemm_ascend/doc/personal.md
->>>>>>> e7b3dac782f7c803e7237d7d63858d77b96dbe63
