@@ -20,15 +20,15 @@ cd $DGA_ROOT_DIR/deep_gemm_ascend/framework
 rm -rf build/
 mkdir build
 cmake -B build -DSOC_VERSION="Ascend910B3" \
-    -DKERNEL_SRC_PATH=$DGA_ROOT_DIR/deep_gemm_ascend/framework/deep_gemm_ascend/include/impls/mmad_m_n.cpp
+    -DKERNEL_SRC_PATH=$DGA_ROOT_DIR/deep_gemm_ascend/framework/deep_gemm_ascend/include/impls/mmad.cpp
 cmake --build build -j
 
 # build kernel bin
-cd $DGA_ROOT_DIR/deep_gemm_ascend/include/impls
+cd $DGA_ROOT_DIR/deep_gemm_ascend/framework/deep_gemm_ascend/include/impls
 rm -rf build/ out/
 mkdir build
 cmake -B build -DSOC_VERSION="Ascend910B3" \
-    -DKERNEL_SRC_PATH=$DGA_ROOT_DIR/deep_gemm_ascend/framework/deep_gemm_ascend/include/impls/mmad_m_n.cpp
+    -DKERNEL_SRC_PATH=$DGA_ROOT_DIR/deep_gemm_ascend/framework/deep_gemm_ascend/include/impls/mmad.cpp
 cmake --build build -j
 ```
 
