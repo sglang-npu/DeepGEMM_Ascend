@@ -43,7 +43,7 @@ class TestCustomAdd(TestCase):
     def test_mmad_cache_ops(self):
         print("============test cache kernel==============")
         length_x = [96, 5952]
-        length_y = [5952, 1536]
+        length_y = [5952, 1536]z
         length_z = [96, 1536]
         x = torch.rand(length_x, device='cpu', dtype=torch.float16)
         y = torch.rand(length_y, device='cpu', dtype=torch.float16)
