@@ -22,42 +22,60 @@ endif()
 
 include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
 
-# ascendc_library use to add kernel file to generate ascendc library
-ascendc_library(mmad_kernel STATIC
-    # deep_gemm_ascend/include/impls/mmad_m_n.cpp
-    ../mmad_m_n.cpp
+set(KERNEL_SRC_PATH
+  "${CMAKE_CURRENT_SOURCE_DIR}/../mmad.cpp"
+  CACHE PATH
+  "Path for dynamic mmad kernel file."
 )
 
+# ascendc_library use to add kernel file to generate ascendc library 生成一个静态库.
+ascendc_library(mmad_kernel STATIC
+    # deep_gemm_ascend/include/impls/mmad.cpp
+    ${KERNEL_SRC_PATH}
+)
+
+# 生成 pybind11_lib 静态库
 add_library(pybind11_lib SHARED csrc/python_api.cpp)
+# 且私有化链接 mmad_kernel、torch_npu
 target_link_libraries(pybind11_lib PRIVATE
   mmad_kernel
   torch_npu
 )
+
+# 打印pytorch path.
 execute_process(COMMAND python3 -c "import os; import torch; print(os.path.dirname(torch.__file__))"
   OUTPUT_STRIP_TRAILING_WHITESPACE
   OUTPUT_VARIABLE TORCH_PATH
 )
+
 message("TORCH_PATH is ${TORCH_PATH}")
+
+# 设置 ascend_home_path - /usr/local/Ascend/ascend-toolkit/latest
 set(ENV{ASCEND_HOME_PATH} ${ASCEND_CANN_PACKAGE_PATH})
 execute_process(COMMAND python3 -c "import os; import torch_npu; print(os.path.dirname(torch_npu.__file__))"
   OUTPUT_STRIP_TRAILING_WHITESPACE
   OUTPUT_VARIABLE TORCH_NPU_PATH
 )
 message("TORCH_NPU_PATH is ${TORCH_NPU_PATH}")
+
+# pybind11_lib 链接 $torch/lib $torch_npu_path/lib
 target_link_directories(pybind11_lib PRIVATE
   ${TORCH_PATH}/lib
   ${TORCH_NPU_PATH}/lib
 )
+# pybind11_lib 引入 pytorch/torch_npu 三方库头文件
 target_include_directories(pybind11_lib PRIVATE
   ${TORCH_NPU_PATH}/include
   ${TORCH_PATH}/include
   ${TORCH_PATH}/include/torch/csrc/api/include
 )
+# 执行命令并输出 PYBIND11_INC 
 execute_process(COMMAND python3 -m pybind11 --includes
   OUTPUT_STRIP_TRAILING_WHITESPACE
   OUTPUT_VARIABLE PYBIND11_INC
 )
 string(REPLACE " " ";" PYBIND11_INC ${PYBIND11_INC})
+# pybind11_lib 设置编译选项
 target_compile_options(pybind11_lib PRIVATE
   ${PYBIND11_INC}
   -D_GLIBCXX_USE_CXX11_ABI=0
@@ -67,6 +85,10 @@ execute_process(COMMAND python3-config --extension-suffix
   OUTPUT_STRIP_TRAILING_WHITESPACE
   OUTPUT_VARIABLE PYBIND11_SUFFIX
 )
+# 打印 PYBIND11_SUFFIX
+message("PYBIND11_SUFFIX is ${PYBIND11_SUFFIX}, OUTPUT_NAME libdeep_gemm_cpp${PYBIND11_SUFFIX}")
+
+# pybind11_lib 编译成库 后缀名  libdeep_gemm_cpp
 set_target_properties(pybind11_lib PROPERTIES
   OUTPUT_NAME deep_gemm_cpp${PYBIND11_SUFFIX}
   PREFIX "" SUFFIX ""
