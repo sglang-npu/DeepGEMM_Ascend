@@ -35,6 +35,8 @@ cmake --build build -j
 ## 3、runtime
 ```bash
 # set kernel bin path, exec only once
+cd $DGA_ROOT_DIR/deep_gemm_ascend/framework/deep_gemm_ascend/include/impls
+
 export KERNEL_BIN_PATH=$(pwd)/out/fatbin/mmad_kernels/mmad_kernels.o
 export PYTHONPATH=$DGA_ROOT_DIR/deep_gemm_ascend/framework/build:$PYTHONPATH
 

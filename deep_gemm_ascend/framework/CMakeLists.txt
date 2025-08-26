@@ -78,7 +78,7 @@ string(REPLACE " " ";" PYBIND11_INC ${PYBIND11_INC})
 # pybind11_lib 设置编译选项
 target_compile_options(pybind11_lib PRIVATE
   ${PYBIND11_INC}
-  -D_GLIBCXX_USE_CXX11_ABI=0
+  -D_GLIBCXX_USE_CXX11_ABI=1
 )
 
 execute_process(COMMAND python3-config --extension-suffix
