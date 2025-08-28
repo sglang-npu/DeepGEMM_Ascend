@@ -1,3 +1,6 @@
+import deep_gemm_cpp
 from deep_gemm_cpp import (
-    mmad_custom
+    run_mmad_custom,
+    run_mmad_cache,
+    grouped_gemm_int8_int8_bf16_nt
 )

@@ -18,6 +18,11 @@ void run_mmad_cache(const at::Tensor &x, const at::Tensor &y, at::Tensor &z, con
 {
     mmad_cache(x, y, z, filePath);
 }
+
+void grouped_gemm_int8_int8_bf16_nt(const at::Tensor &x, const at::Tensor &y, at::Tensor &z, const char *filePath)
+{
+    std::cout << "now in deepgemm ascend code!!!" << std::endl;
+}
 }
 
 // ReSharper disable once CppParameterMayBeConstPtrOrRef
@@ -26,4 +31,5 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 
     m.def("run_mmad_custom", &deep_gemm_ascend::run_mmad_custom, "");
     m.def("run_mmad_cache", &deep_gemm_ascend::run_mmad_cache, "");
+    m.def("grouped_gemm_int8_int8_bf16_nt", &deep_gemm_ascend::grouped_gemm_int8_int8_bf16_nt, "");
 }
