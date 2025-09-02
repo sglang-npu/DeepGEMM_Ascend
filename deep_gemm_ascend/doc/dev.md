@@ -15,6 +15,10 @@ git branch -vv
 # set home dir to project root path, exec only once
 export DGA_ROOT_DIR=$(pwd)
 
+# set bisheng compiler
+export CC=/usr/local/Ascend/ascend-toolkit/latest/compiler/ccec_compiler/bin/bisheng
+export CXX=/usr/local/Ascend/ascend-toolkit/latest/compiler/ccec_compiler/bin/bisheng
+
 # build python api
 cd $DGA_ROOT_DIR/deep_gemm_ascend/framework
 rm -rf build/
@@ -35,7 +39,7 @@ cmake --build build -j
 ## 3、runtime
 ```bash
 # set kernel bin path, exec only once
-export KERNEL_BIN_PATH=$(pwd)/out/fatbin/mmad_kernels/mmad_kernels.o
+export KERNEL_BIN_PATH=$DGA_ROOT_DIR/deep_gemm_ascend/framework/deep_gemm_ascend/include/impls/out/fatbin/mmad_kernels/mmad_kernels.o
 export PYTHONPATH=$DGA_ROOT_DIR/deep_gemm_ascend/framework/build:$PYTHONPATH
 export PYTHONPATH=$DGA_ROOT_DIR/deep_gemm_ascend/framework:$PYTHONPATH
 

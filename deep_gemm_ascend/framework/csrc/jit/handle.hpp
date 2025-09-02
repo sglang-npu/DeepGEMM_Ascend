@@ -1,6 +1,8 @@
 #pragma once
 
 #include <filesystem>
+#include "../utils/exception.hpp"
+
 namespace deep_gemm_ascend {
 // Use AscendC runtime API
 using LibraryHandle = aclrtBinHandle;
@@ -8,22 +10,14 @@ using KernelHandle = aclrtFuncHandle;
 using LaunchArgsHandle = aclrtArgsHandle;
 using LaunchParamHandle = aclrtParamHandle;
 
-#define CHECK_ACL(x)                                                                        \
-    do {                                                                                    \
-        aclError __ret = x;                                                                 \
-        if (__ret != ACL_ERROR_NONE) {                                                      \
-            std::cerr << __FILE__ << ":" << __LINE__ << " aclError:" << __ret << std::endl; \
-        }                                                                                   \
-    } while (0);
-
-static KernelHandle load_kernel(const char *filePath, const char *func_name,
-                                LibraryHandle *binHandlePtr = nullptr) {
+static KernelHandle load_kernel(const std::filesystem::path &filePath,
+    const char *func_name, LibraryHandle *binHandlePtr = nullptr)
+{
     LibraryHandle binHandle = nullptr;
     KernelHandle funcHandle = nullptr;
-    aclrtArgsHandle argsHandle = nullptr;
     // filePath = rootPath + "/out/fatbin/mmad_kernels/mmad_kernels.o";
-    std::cout << "bin file path is " << filePath << std::endl;
-    CHECK_ACL(aclrtBinaryLoadFromFile(filePath, nullptr, &binHandle));
+    std::cout << "bin file path is " << filePath.c_str() << std::endl;
+    CHECK_ACL(aclrtBinaryLoadFromFile(filePath.c_str(), nullptr, &binHandle));
     CHECK_ACL(aclrtBinaryGetFunction(binHandle, func_name, &funcHandle));
 
     if (binHandlePtr != nullptr)
@@ -31,14 +25,13 @@ static KernelHandle load_kernel(const char *filePath, const char *func_name,
     return funcHandle;
 }
 
-static void unload_library(LibraryHandle& binHandle) {
+static void unload_library(LibraryHandle& binHandle)
+{
     CHECK_ACL(aclrtBinaryUnLoad(binHandle));
 }
 
-static void construct_launch_args(const KernelHandle& kernel,
-                                  LaunchArgsHandle& argsHandle,
-                                  LaunchParamHandle& paramHandle,
-                                  const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
+static void construct_launch_args(const KernelHandle& kernel, LaunchArgsHandle& argsHandle,
+    LaunchParamHandle& paramHandle, const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
 {
     CHECK_ACL(aclrtKernelArgsInit(kernel, &argsHandle));
     auto xDevice = const_cast<void *>(x.storage().data());
@@ -51,7 +44,8 @@ static void construct_launch_args(const KernelHandle& kernel,
 }
 
 static auto launch_kernel(const KernelHandle& kernel, uint32_t blockDim,
-    aclrtStream acl_stream, LaunchArgsHandle& argsHandle) {
+    aclrtStream acl_stream, LaunchArgsHandle& argsHandle) 
+{
     CHECK_ACL(aclrtLaunchKernelWithConfig(kernel, blockDim, acl_stream, nullptr, argsHandle, nullptr));
     CHECK_ACL(aclrtSynchronizeStream(acl_stream));
 }
