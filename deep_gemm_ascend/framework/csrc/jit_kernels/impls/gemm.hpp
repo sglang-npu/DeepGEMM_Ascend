@@ -8,6 +8,7 @@
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "../../jit/handle.hpp"
 #include "../../jit/kernel_runtime.hpp"
+#include "../../jit/compiler.hpp"
 
 namespace deep_gemm_ascend {
 static void mmad_custom(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
@@ -49,16 +50,23 @@ static void mmad_cache(const at::Tensor &x, const at::Tensor &y, at::Tensor &z, 
 
 static void mmad_rtc(const at::Tensor &x, const at::Tensor &y, at::Tensor &z, const std::filesystem::path &codePath)
 {
+    // 0 check input
+    // 1 generate args
     auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
     uint32_t blockDim = 8;
 
     KernelHandle kernel = nullptr;
     LaunchArgsHandle argsHandle = nullptr;
     LaunchParamHandle paramHandle = nullptr;
-    KernelRuntime runtime(codePath);
+    // 2 generate code
+    // 3 build code
+    std::shared_ptr<CMakeCompiler> compiler = std::make_shared<CMakeCompiler>();
 
-    runtime.ConstructArgs(argsHandle, paramHandle, x, y, z);
-    kernel = runtime.kernel;
+    auto runtime = compiler->build(codePath.string());
+
+    // 4 launch kernel
+    runtime->ConstructArgs(argsHandle, paramHandle, x, y, z);
+    kernel = runtime->kernel;
 
     CHECK_ACL(aclrtLaunchKernelWithConfig(kernel, blockDim, acl_stream, nullptr, argsHandle, nullptr));
     CHECK_ACL(aclrtSynchronizeStream(acl_stream));

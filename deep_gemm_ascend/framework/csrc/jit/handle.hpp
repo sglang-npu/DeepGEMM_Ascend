@@ -15,7 +15,6 @@ static KernelHandle load_kernel(const std::filesystem::path &filePath,
 {
     LibraryHandle binHandle = nullptr;
     KernelHandle funcHandle = nullptr;
-    // filePath = rootPath + "/out/fatbin/mmad_kernels/mmad_kernels.o";
     std::cout << "bin file path is " << filePath.c_str() << std::endl;
     CHECK_ACL(aclrtBinaryLoadFromFile(filePath.c_str(), nullptr, &binHandle));
     CHECK_ACL(aclrtBinaryGetFunction(binHandle, func_name, &funcHandle));
