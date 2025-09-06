@@ -33,7 +33,7 @@ public:
         // 2.1 put code to code path
         std::filesystem::create_directories(code_dir);
         std::filesystem::path code_path = code_dir + KERNEL_FILE_NAME;
-//        OutputKernelFile(code, code_path);
+        OutputKernelFile(code, code_path);
         // 2.2 compile code
         std::string bin_dir;
         compile(code_dir, bin_dir);
