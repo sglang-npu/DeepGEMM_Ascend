@@ -104,7 +104,7 @@ static void mmad_rtc(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
         .m_sc_blocks = 6, .n_sc_blocks = 96,
         .m_sec_o_blocks = 3, .n_sec_o_blocks = 8,
         .k_o_iter_blocks = 20, .db_o_blocks = 10,
-        .m_o_fix = 0, .n_o_fix = 0, .k_o_fix = 0, .db_o_num = 0,
+        .m_o_fix = 0, .n_o_fix = 0, .k_o_fix = 0, .db_o_num = 2,
         .m_parts = 2, .n_parts = 12, .r_m_parts = 2, .r_n_parts = 12,
         .r_m_blocks = 0, .r_n_blocks = 0, .r_k_blocks = 2, .r_db_num = 2,
     };
@@ -120,11 +120,11 @@ static void mmad_rtc(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
     auto runtime = compiler->build(code, compile_args, kernel_name);
 
     // 4 launch kernel
-    // runtime->ConstructArgs(argsHandle, paramHandle, x, y, z);
-    // kernel = runtime->kernel;
+    runtime->ConstructArgs(argsHandle, paramHandle, x, y, z);
+    kernel = runtime->kernel;
 
-    // CHECK_ACL(aclrtLaunchKernelWithConfig(kernel, blockDim, acl_stream, nullptr, argsHandle, nullptr));
-    // CHECK_ACL(aclrtSynchronizeStream(acl_stream));
+    CHECK_ACL(aclrtLaunchKernelWithConfig(kernel, blockDim, acl_stream, nullptr, argsHandle, nullptr));
+    CHECK_ACL(aclrtSynchronizeStream(acl_stream));
 }
 }
 

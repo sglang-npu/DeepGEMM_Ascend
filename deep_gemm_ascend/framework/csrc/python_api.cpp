@@ -1,5 +1,4 @@
 #include <pybind11/pybind11.h>
-#include <pybind11/pytorch.h>
 #include <torch/python.h>
 #include <torch/extension.h>
 
