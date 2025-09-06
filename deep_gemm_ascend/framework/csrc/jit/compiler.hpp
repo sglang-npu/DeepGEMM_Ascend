@@ -15,7 +15,7 @@ public:
         uint32_t kernelType;
     };
     Compiler() {
-        rootPath_ = "/home/q30063557/code/dga/";
+        rootPath_ = get_env<std::string>("DGA_ROOT_DIR");
         socVersion_ = "Ascend910B3";
     }
 
@@ -24,12 +24,14 @@ public:
     std::shared_ptr<KernelRuntime> build(const std::string& code,
         const CompileArgs& compile_args, const std::string& kernel_name) const {
         // todo 1 get from cache
-        const auto kernel_signature = fmt::format("m{}n{}k{}_type{}_",
+        const auto kernel_signature = fmt::format("m{}n{}k{}_type{}",
             compile_args.m, compile_args.n, compile_args.k, compile_args.kernelType);
-        std::string code_dir = fmt::format("{}/deep_gemm_ascend/cache/kernel_{}", rootPath_, kernel_signature);
+        std::string code_dir = fmt::format("{}/deep_gemm_ascend/cache/kernel_{}/", rootPath_, kernel_signature);
+        std::cout << "code dir is: " << code_dir << std::endl;
 
         // 2 compile new cache
         // 2.1 put code to code path
+        std::filesystem::create_directories(code_dir);
         std::filesystem::path code_path = code_dir + KERNEL_FILE_NAME;
         OutputKernelFile(code, code_path);
         // 2.2 compile code
@@ -46,6 +48,7 @@ private:
     void OutputKernelFile(const std::string& code, const std::filesystem::path& code_path) const
     {
         // put code to code path
+        std::cout << "put code to code path: " << code_path << std::endl;
         std::ofstream ofs(code_path);
         ofs << code;
         ofs.close();
@@ -58,13 +61,13 @@ private:
     std::string socVersion_;
 public:
     CMakeCompiler() {
-        rootPath_ = "/home/q30063557/code/dga/";
+        rootPath_ = get_env<std::string>("DGA_ROOT_DIR");
         socVersion_ = "Ascend910B3";
     }
 
     void compile(const std::string& code_dir, std::string& bin_dir) const override {
         std::string cmakePath = rootPath_ + "/deep_gemm_ascend/cache/";
-        std::string buildPath = code_dir + "_build/";
+        std::string buildPath = code_dir + "/build/";
 
         std::string command = "cmake " + cmakePath +
             " -B " + buildPath +
@@ -74,7 +77,7 @@ public:
         std::cout << "run command: " << command << std::endl;
         const auto& [return_code, output] = call_external_command(command);
         std::cout << "run command result: " << return_code << std::endl;
-        std::cout << "run command output: " << output << std::endl;
+        // std::cout << "run command output: " << output << std::endl;
         bin_dir = cmakePath + "/out/fatbin/mmad_kernels/mmad_kernels.o";
         std::cout << "bin path : " << bin_dir.c_str() << std::endl;
     }

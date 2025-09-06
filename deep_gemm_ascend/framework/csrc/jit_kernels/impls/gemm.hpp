@@ -26,25 +26,6 @@ static void mmad_custom(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
     );
 }
 
-static void mmad_cache(const at::Tensor &x, const at::Tensor &y, at::Tensor &z, const std::filesystem::path &binPath)
-{
-    auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
-    uint32_t blockDim = 8;
-    
-    LibraryHandle binHandle = nullptr;
-    KernelHandle kernel = nullptr;
-    LaunchArgsHandle argsHandle = nullptr;
-    LaunchParamHandle paramHandle = nullptr;
-
-    kernel = load_kernel(binPath, "mmad_custom", &binHandle);
-    construct_launch_args(kernel, argsHandle, paramHandle, x, y, z);
-
-    CHECK_ACL(aclrtLaunchKernelWithConfig(kernel, blockDim, acl_stream, nullptr, argsHandle, nullptr));
-    CHECK_ACL(aclrtSynchronizeStream(acl_stream));
-
-    unload_library(binHandle);
-}
-
 class RTCRuntime final : public LaunchRuntime<RTCRuntime> {
 public:
     struct Args {
