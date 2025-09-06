@@ -43,9 +43,9 @@ class TestCustomAdd(TestCase):
 
     def test_mmad_rtc_ops(self):
         print("============test runtime compile kernel==============")
-        length_x = [96, 5952]
-        length_y = [5952, 1536]
-        length_z = [96, 1536]
+        length_x = [6, 96, 5952]
+        length_y = [6, 5952, 1536]
+        length_z = [6, 96, 1536]
         x = torch.rand(length_x, device='cpu', dtype=torch.float16)
         y = torch.rand(length_y, device='cpu', dtype=torch.float16)
         z = torch.empty(length_z, device='cpu', dtype=torch.float16)
