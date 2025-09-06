@@ -34,6 +34,8 @@ ascendc_library(mmad_kernel STATIC
     ${KERNEL_SRC_PATH}
 )
 
+# 引入fmt三方库
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../third-party/fmt/include)
 # 生成 pybind11_lib 静态库
 add_library(pybind11_lib SHARED csrc/python_api.cpp)
 # 且私有化链接 mmad_kernel、torch_npu

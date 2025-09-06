@@ -15,6 +15,10 @@ git branch -vv
 # set home dir to project root path, exec only once
 export DGA_ROOT_DIR=$(pwd)
 
+# download third library
+cd $DGA_ROOT_DIR/deep_gemm_ascend/third-party
+git clone https://github.com/fmtlib/fmt.git
+
 # set bisheng compiler
 export CC=/usr/local/Ascend/ascend-toolkit/latest/compiler/ccec_compiler/bin/bisheng
 export CXX=/usr/local/Ascend/ascend-toolkit/latest/compiler/ccec_compiler/bin/bisheng
