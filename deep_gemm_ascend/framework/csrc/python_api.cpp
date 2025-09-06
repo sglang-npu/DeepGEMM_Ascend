@@ -1,5 +1,6 @@
 #include <pybind11/pybind11.h>
 #include <torch/python.h>
+#include <torch/extension.h>
 
 #include "jit_kernels/impls/gemm.hpp"
 
@@ -20,10 +21,10 @@ void run_mmad_cache(const at::Tensor &x, const at::Tensor &y, at::Tensor &z, con
     mmad_cache(x, y, z, binPath);
 }
 
-void run_mmad_rtc(const at::Tensor &x, const at::Tensor &y, at::Tensor &z, const char *strPath)
+void run_mmad_rtc(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
 {
-    std::filesystem::path codePath(strPath);
-    mmad_rtc(x, y, z, codePath);
+    std::cout << "now in deepgemm ascend run_mmad_rtc!!!" << std::endl;
+    mmad_rtc(x, y, z);
 }
 
 void grouped_gemm_int8_int8_bf16_nt(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
@@ -40,7 +41,11 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 
     m.def("run_mmad_cache", &deep_gemm_ascend::run_mmad_cache, "");
 
-    m.def("run_mmad_rtc", &deep_gemm_ascend::run_mmad_rtc, "");
+    // work in process,do not use it
+    m.def("run_mmad_rtc", &deep_gemm_ascend::run_mmad_rtc,
+        py::arg("x"),
+        py::arg("y"),
+        py::arg("z"));
 
     m.def("grouped_gemm_int8_int8_bf16_nt", &deep_gemm_ascend::grouped_gemm_int8_int8_bf16_nt, "");
 }
