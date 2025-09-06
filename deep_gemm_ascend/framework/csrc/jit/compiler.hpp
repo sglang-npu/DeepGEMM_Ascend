@@ -15,7 +15,7 @@ public:
         uint32_t kernelType;
     };
     Compiler() {
-        rootPath_ = "/home/q30063557/code/dga/";
+        rootPath_ = "/home/t00937989/DeepGEMM_Ascend/";
         socVersion_ = "Ascend910B3";
     }
 
@@ -31,7 +31,7 @@ public:
         // 2 compile new cache
         // 2.1 put code to code path
         std::filesystem::path code_path = code_dir + KERNEL_FILE_NAME;
-        OutputKernelFile(code, code_path);
+//        OutputKernelFile(code, code_path);
         // 2.2 compile code
         std::string bin_dir;
         compile(code_dir, bin_dir);
@@ -58,7 +58,7 @@ private:
     std::string socVersion_;
 public:
     CMakeCompiler() {
-        rootPath_ = "/home/q30063557/code/dga/";
+        rootPath_ = "/home/t00937989/DeepGEMM_Ascend/";
         socVersion_ = "Ascend910B3";
     }
 

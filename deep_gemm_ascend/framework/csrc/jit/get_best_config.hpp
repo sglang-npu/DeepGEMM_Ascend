@@ -72,38 +72,3 @@ Args get_best_config(uint32_t batch, uint32_t m, uint32_t n, uint32_t k) {
 
     return args;
 }
-
-int main() {
-    Args config = get_best_config(0, 96, 1536, 5952);
-    std::cout << "Args Configuration:" << std::endl;
-    std::cout << "k_iters = " << config.k_iters << std::endl;
-    std::cout << "batch = " << config.batch << std::endl;
-    std::cout << "m = " << config.m << std::endl;
-    std::cout << "n = " << config.n << std::endl;
-    std::cout << "k = " << config.k << std::endl;
-    std::cout << "m_sections = " << config.m_sections << std::endl;
-    std::cout << "n_sections = " << config.n_sections << std::endl;
-    std::cout << "m_blocks = " << config.m_blocks << std::endl;
-    std::cout << "n_blocks = " << config.n_blocks << std::endl;
-    std::cout << "k_blocks = " << config.k_blocks << std::endl;
-    std::cout << "m_sc_blocks = " << config.m_sc_blocks << std::endl;
-    std::cout << "n_sc_blocks = " << config.n_sc_blocks << std::endl;
-    std::cout << "m_sec_o_blocks = " << config.m_sec_o_blocks << std::endl;
-    std::cout << "n_sec_o_blocks = " << config.n_sec_o_blocks << std::endl;
-    std::cout << "k_o_iter_blocks = " << config.k_o_iter_blocks << std::endl;
-    std::cout << "db_o_blocks = " << config.db_o_blocks << std::endl;
-    std::cout << "m_o_fix = " << config.m_o_fix << std::endl;
-    std::cout << "n_o_fix = " << config.n_o_fix << std::endl;
-    std::cout << "k_o_fix = " << config.k_o_fix << std::endl;
-    std::cout << "db_o_num = " << config.db_o_num << std::endl;
-    std::cout << "m_parts = " << config.m_parts << std::endl;
-    std::cout << "n_parts = " << config.n_parts << std::endl;
-    std::cout << "r_m_parts = " << config.r_m_parts << std::endl;
-    std::cout << "r_n_parts = " << config.r_n_parts << std::endl;
-    std::cout << "r_m_blocks = " << config.r_m_blocks << std::endl;
-    std::cout << "r_n_blocks = " << config.r_n_blocks << std::endl;
-    std::cout << "r_k_blocks = " << config.r_k_blocks << std::endl;
-    std::cout << "r_db_num = " << config.r_db_num << std::endl;
-
-    return 0;
-}

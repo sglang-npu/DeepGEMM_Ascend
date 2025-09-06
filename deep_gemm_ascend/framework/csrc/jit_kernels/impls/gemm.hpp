@@ -2,7 +2,7 @@
 #define GEMM_HPP
 
 #include <torch/extension.h>
-
+#include "../../jit/get_best_config.hpp"
 #include "acl/acl.h"
 #include "aclrtlaunch_mmad_custom.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
@@ -91,22 +91,27 @@ static void mmad_rtc(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
     // 1 generate args
     auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
     uint32_t blockDim = 8;
+    uint32_t batch = x.size(0);
+    uint32_t m = x.size(1);
+    uint32_t n = y.size(2);
+    uint32_t k = y.size(1);
+    const auto& config = get_best_config(batch, m, n, k);
 
     KernelHandle kernel = nullptr;
     LaunchArgsHandle argsHandle = nullptr;
     LaunchParamHandle paramHandle = nullptr;
     // 2 generate code
     const RTCRuntime::Args args = {
-        .k_iters = 19, .batch = 0,
-        .m = 96, .n = 1536, .k = 5952, 
-        .m_sections = 1, .n_sections = 1,
-        .m_blocks = 6, .n_blocks = 96, .k_blocks = 372,
-        .m_sc_blocks = 6, .n_sc_blocks = 96,
-        .m_sec_o_blocks = 3, .n_sec_o_blocks = 8,
-        .k_o_iter_blocks = 20, .db_o_blocks = 10,
-        .m_o_fix = 0, .n_o_fix = 0, .k_o_fix = 0, .db_o_num = 2,
-        .m_parts = 2, .n_parts = 12, .r_m_parts = 2, .r_n_parts = 12,
-        .r_m_blocks = 0, .r_n_blocks = 0, .r_k_blocks = 2, .r_db_num = 2,
+        .k_iters = config.k_iters, .batch = config.batch,
+        .m = config.m, .n = config.n, .k = config.k,
+        .m_sections = config.m_sections, .n_sections = config.n_sections,
+        .m_blocks = config.m_blocks, .n_blocks = config.n_blocks, .k_blocks = config.k_blocks,
+        .m_sc_blocks = config.m_sc_blocks, .n_sc_blocks = config.n_sc_blocks,
+        .m_sec_o_blocks = config.m_sec_o_blocks, .n_sec_o_blocks = config.n_sec_o_blocks,
+        .k_o_iter_blocks = config.k_o_iter_blocks, .db_o_blocks = config.db_o_blocks,
+        .m_o_fix = config.m_o_fix, .n_o_fix = config.n_o_fix, .k_o_fix = config.k_o_fix, .db_o_num = config.db_o_num,
+        .m_parts = config.m_parts, .n_parts = config.n_parts, .r_m_parts = config.r_m_parts, .r_n_parts = config.r_n_parts,
+        .r_m_blocks = config.r_m_blocks, .r_n_blocks = config.r_n_blocks, .r_k_blocks = config.r_k_blocks, .r_db_num = config.r_db_num,
     };
     const auto& code = RTCRuntime::generate(args);
     // 3 build code
