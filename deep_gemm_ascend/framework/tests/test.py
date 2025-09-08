@@ -58,6 +58,23 @@ class TestCustomAdd(TestCase):
         print(f"cpu_out: {cpuout=}")
         print(f"npu_out: {z_npu.float()=}")
 
+    def test_mmad_rtc_ops_2(self):
+        print("============test runtime compile kernel again==============")
+        length_x = [1, 96, 5952]
+        length_y = [1, 5952, 1536]
+        length_z = [1, 96, 1536]
+        x = torch.rand(length_x, device='cpu', dtype=torch.float16)
+        y = torch.rand(length_y, device='cpu', dtype=torch.float16)
+        z = torch.empty(length_z, device='cpu', dtype=torch.float16)
+
+        x_npu = x.npu()
+        y_npu = y.npu()
+        z_npu = z.npu()
+        deep_gemm_ascend.run_mmad_rtc(x_npu, y_npu, z_npu)
+        cpuout = x.float() @ y.float()
+        print(f"cpu_out: {cpuout=}")
+        print(f"npu_out: {z_npu.float()=}")
+
 
 if __name__ == "__main__":
     run_tests()

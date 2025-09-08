@@ -2,18 +2,18 @@
 
 #include "handle.hpp"
 #include "../utils/system.hpp"
+#include "../utils/constant.hpp"
 
 namespace deep_gemm_ascend {
-
 class KernelRuntime final {
 public:
     LibraryHandle binHandle = nullptr;
     KernelHandle kernel = nullptr;
 
-    explicit KernelRuntime(const std::string& bin_path) {
+    explicit KernelRuntime(const std::string& kernel_dir) {
         // todo 1 check param
         // todo 2 parse param
-
+        std::string bin_path = kernel_dir + utils::KERNEL_FATBIN_NAME;
         // 3 load file
         kernel = load_kernel(bin_path.c_str(), "mmad_custom", &binHandle);
     }
@@ -22,6 +22,11 @@ public:
         const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
     {
         construct_launch_args(kernel, argsHandle, paramHandle, x, y, z);
+    }
+
+    static bool check_validity(const std::filesystem::path& kernel_dir) {
+        return std::filesystem::exists(kernel_dir / utils::KERNEL_CODE_NAME) and
+               std::filesystem::exists(kernel_dir / utils::KERNEL_FATBIN_NAME);
     }
 
     ~KernelRuntime() noexcept(false) {
