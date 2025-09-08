@@ -76,11 +76,11 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
 
 const std::string FILE_EXEC =
 R"(
-    for(uint32_t b = 0; b < batch; b++)
+    for(uint32_t bi = 0; bi < batch; bi++)
     {
-        uint32_t offsetA = b * m * k;
-        uint32_t offsetB = b * n * k;
-        uint32_t offsetC = b * m * n;
+        uint32_t offsetA = bi * m * k;
+        uint32_t offsetB = bi * n * k;
+        uint32_t offsetC = bi * m * n;
         uint32_t a_offset, b_offset;
         uint32_t msec_blocks, nsec_blocks, k_iter_blocks, db_blocks;
         uint32_t m_fix, n_fix, k_fix;

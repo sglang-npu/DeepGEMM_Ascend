@@ -35,11 +35,11 @@ public:
         std::filesystem::path code_path = code_dir + KERNEL_FILE_NAME;
         OutputKernelFile(code, code_path);
         // 2.2 compile code
-        std::string bin_dir;
-        compile(code_dir, bin_dir);
+        std::string bin_path;
+        compile(code_dir, bin_path);
 
         // 3 create runtime
-        std::shared_ptr<KernelRuntime> runtime = std::make_shared<KernelRuntime>(bin_dir);
+        std::shared_ptr<KernelRuntime> runtime = std::make_shared<KernelRuntime>(bin_path);
         return runtime;
     }
 
@@ -56,16 +56,13 @@ private:
 };
 
 class CMakeCompiler final: public Compiler {
-private:
-    std::string rootPath_;
-    std::string socVersion_;
 public:
     CMakeCompiler() {
         rootPath_ = get_env<std::string>("DGA_ROOT_DIR");
         socVersion_ = "Ascend910B3";
     }
 
-    void compile(const std::string& code_dir, std::string& bin_dir) const override {
+    void compile(const std::string& code_dir, std::string& bin_path) const override {
         std::string cmakePath = rootPath_ + "/deep_gemm_ascend/cache/";
         std::string buildPath = code_dir + "/build/";
 
@@ -74,15 +71,29 @@ public:
             " -DSOC_VERSION=" + socVersion_ +
             " -DKERNEL_SRC_PATH=" + code_dir + KERNEL_FILE_NAME +
             " && cmake --build " + buildPath;
-        std::cout << "run command: " << command << std::endl;
+        std::cout << "run cmake command: " << command << std::endl;
         const auto& [return_code, output] = call_external_command(command);
-        std::cout << "run command result: " << return_code << std::endl;
-        // std::cout << "run command output: " << output << std::endl;
-        bin_dir = cmakePath + "/out/fatbin/mmad_kernels/mmad_kernels.o";
-        std::cout << "bin path : " << bin_dir.c_str() << std::endl;
+        std::cout << "run cmake command result: " << return_code << std::endl;
+        // std::cout << "run cmake command output: " << output << std::endl;
+        bin_path = cmakePath + "/out/fatbin/mmad_kernels/mmad_kernels.o";
+        CopyBinFile(bin_path, code_dir);
+        std::cout << "bin path : " << bin_path.c_str() << std::endl;
     }
 
     ~CMakeCompiler() = default;
+private:
+    void CopyBinFile(std::string& bin_path, const std::string& code_dir) const
+    {
+        std::string command = "cp -f " + bin_path + " " + code_dir;
+        std::cout << "run move command: " << command << std::endl;
+        const auto& [return_code, output] = call_external_command(command);
+        std::cout << "run move command result: " << return_code << std::endl;
+        // std::cout << "run move command output: " << output << std::endl;
+        bin_path = code_dir + "mmad_kernels.o";
+    }
+
+    std::string rootPath_;
+    std::string socVersion_;
 };
 
 } // namespace deep_gemm_ascend

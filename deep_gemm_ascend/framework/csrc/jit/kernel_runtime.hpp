@@ -10,12 +10,12 @@ public:
     LibraryHandle binHandle = nullptr;
     KernelHandle kernel = nullptr;
 
-    explicit KernelRuntime(const std::string& binPath) {
+    explicit KernelRuntime(const std::string& bin_path) {
         // todo 1 check param
         // todo 2 parse param
 
         // 3 load file
-        kernel = load_kernel(binPath.c_str(), "mmad_custom", &binHandle);
+        kernel = load_kernel(bin_path.c_str(), "mmad_custom", &binHandle);
     }
 
     void ConstructArgs(LaunchArgsHandle &argsHandle, LaunchParamHandle &paramHandle, 
