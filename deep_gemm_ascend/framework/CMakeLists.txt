@@ -29,7 +29,7 @@ set(KERNEL_SRC_PATH
 )
 
 # ascendc_library use to add kernel file to generate ascendc library 生成一个静态库.
-ascendc_library(mmad_kernel STATIC
+ascendc_library(kernels STATIC
     # deep_gemm_ascend/include/impls/mmad.cpp
     ${KERNEL_SRC_PATH}
 )
@@ -40,7 +40,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../third-party/fmt/include)
 add_library(pybind11_lib SHARED csrc/python_api.cpp)
 # 且私有化链接 mmad_kernel、torch_npu
 target_link_libraries(pybind11_lib PRIVATE
-  mmad_kernel
+  kernels
   torch_npu
 )
 
@@ -81,6 +81,11 @@ string(REPLACE " " ";" PYBIND11_INC ${PYBIND11_INC})
 target_compile_options(pybind11_lib PRIVATE
   ${PYBIND11_INC}
   -D_GLIBCXX_USE_CXX11_ABI=1
+)
+
+# ascendc 算子编译选项
+ascendc_compile_options(kernels PRIVATE
+  -g -O0
 )
 
 execute_process(COMMAND python3-config --extension-suffix
