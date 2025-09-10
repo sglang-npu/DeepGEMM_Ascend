@@ -69,20 +69,22 @@ class TestCustomAdd(TestCase):
     def test_mmad_custom_ops(self):
         # return
         print("============test api kernel==============")
-        length_x = [96, 5952]
-        length_y = [5952, 1536]
-        length_z = [96, 1536]
-        x = torch.rand(length_x, device='cpu', dtype=torch.float16)
-        y = torch.rand(length_y, device='cpu', dtype=torch.float16)
-        z = torch.empty(length_z, device='cpu', dtype=torch.float16)
+        x1_gm, x2_gm, golden = gen_golden_data()
 
-        x_npu = x.npu()
-        y_npu = y.npu()
-        z_npu = z.npu()
+        x_npu = torch.tensor(x1_gm, device='npu')
+        y_npu = torch.tensor(x2_gm, device='npu')
+        # length_x = [96, 5952]
+        # length_y = [5952, 1536]
+        length_z = [96, 1536]
+        # x = torch.rand(length_x, device='cpu', dtype=torch.float16)
+        # y = torch.rand(length_y, device='cpu', dtype=torch.float16)
+        z_npu = torch.empty(length_z, device='cpu', dtype=torch.float16) # 要改成float32吗？ 
+
         deep_gemm_ascend.run_mmad_custom(x_npu, y_npu, z_npu)
-        cpuout = x.float() @ y.float()
-        print(f"cpu_out: {cpuout=}")
-        print(f"npu_out: {z_npu.float()=}")
+        # cpuout = x.float() @ y.float()
+        # print(f"cpu_out: {cpuout=}")
+        # print(f"npu_out: {z_npu.float()=}")
+        assert verify_result(z_npu.cpu().numpy(), golden)
 
     def test_mmad_rtc_ops(self):
         print("============test runtime compile kernel==============")
