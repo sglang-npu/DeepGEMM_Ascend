@@ -20,11 +20,54 @@ print('lt get dga module path', deep_gemm_ascend.__file__)
 
 torch.npu.config.allow_internal_format = False
 
+def gen_golden_data():
+    M = 96 
+    N = 1536
+    K = 5952
+
+    rng = np.random.default_rng()
+
+    def heavy_tail(shape):
+        v = rng.lognormal(mean=1.0, sigma=1.2, size=shape)
+        return np.clip(v, 1, 10).astype(np.float16)
+    
+    x1_gm = heavy_tail([M, K])
+    x2_gm = heavy_tail([K, N])
+
+    golden = (npu.matmul(x1_gm.astype(np.float32), x2_gm.astype(np.float32))).astype(np.float32)
+    return x1_gm, x2_gm, golden 
+
+def verify_result(output, golden):
+    output = output.reshape(-1)
+    print(f"{output=}")
+    printf(f"{output.shape=}")
+
+    golden = golden.reshape(-1)
+    diff_ele_result = np.isclose(output,
+                                 golden, 
+                                 rtol=relative_tol,
+                                 atol=absolute_tol,
+                                 equal_nan=True)
+    diff_ele_idxs = np.where(diff_ele_result == False)[0]
+    for idx in range(len(diff_ele_idxs)):
+        real_idx = diff_ele_idxs[idx]
+        golden_data = golden[real_idx]
+        output_data = output[real_idx]
+        print(
+            "data index: %06d, excepted: %-.9f， actual: %-.9f，rdiff: %-.6f" % (real_idx, golden_data, output_data, abs(output_data - golden_data) / golden_data)
+        )
+
+        if idx == 100:
+            break
+    
+    error_ratio = float(diff_ele_idxs.size) / golden.size 
+    print("error ratio: %.4f， tolerance： %.4f" % (error_ratio, error_tol))
+    return error_ratio <= error_tol
 
 class TestCustomAdd(TestCase):
 
     def test_mmad_custom_ops(self):
-        return
+        # return
         print("============test api kernel==============")
         length_x = [96, 5952]
         length_y = [5952, 1536]
