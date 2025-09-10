@@ -128,9 +128,9 @@ R"(
         AscendC::LocalTensor<float> c1Local = outQueueCO1.AllocTensor<float>();
 
         AscendC::TQue<AscendC::TPosition::A2, 1> inQueueA2;
-        pipe.InitBuffer(inQueueA2, 1, BlockSize(msec_blocks * db_blocks) * sizeof(half));
+        pipe.InitBuffer(inQueueA2, 1, BlockSize(msec_o_blocks * db_o_blocks) * sizeof(half));
         AscendC::TQue<AscendC::TPosition::B2, 1> inQueueB2;
-        pipe.InitBuffer(inQueueB2, 1, BlockSize(db_blocks * nsec_blocks) * sizeof(half));
+        pipe.InitBuffer(inQueueB2, 1, BlockSize(db_o_blocks * nsec_o_blocks) * sizeof(half));
 
         AscendC::LocalTensor<half> a1Local, b1Local, a1, b1;
         AscendC::LocalTensor<half> a2Local, b2Local, a2, b2;
@@ -173,7 +173,7 @@ R"(
                 {
                     if (ki == (k_iters - 1))
                     {
-                        k_iter_blocks = (db_o_num - 1) * db_o_blocks + r_k_blocks;
+                        k_iter_blocks = (r_db_num - 1) * db_o_blocks + r_k_blocks;
                         db_num = r_db_num;
                     }
                     else
@@ -214,7 +214,7 @@ R"(
 
                     for (int k = 0; k < db_num; k++)
                     {
-                        if (k == (db_num - 1))
+                        if ((ki == (k_iters - 1)) && k == (db_num - 1))
                         {
                             db_blocks = r_k_blocks;
                             k_fix = k_o_fix;
@@ -247,7 +247,7 @@ R"(
 
                         // Nz -> Zn
                         loadDataParams.repeatTimes = nsec_blocks;
-                        loadDataParams.srcStride = (db_num - 1) * db_o_blocks + db_blocks;
+                        loadDataParams.srcStride = k_iter_blocks;
                         loadDataParams.dstGap = 0;
                         loadDataParams.ifTranspose = true;
                         for(int j = 0; j < db_blocks; j++)

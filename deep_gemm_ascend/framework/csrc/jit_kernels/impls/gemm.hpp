@@ -71,7 +71,7 @@ static void mmad_rtc(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
     // 0 check input
     // 1 generate args
     auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
-    uint32_t blockDim = 8;
+    uint32_t blockDim = 1;
     uint32_t batch = x.size(0);
     uint32_t m = x.size(1);
     uint32_t n = y.size(2);

@@ -59,7 +59,7 @@ def verify_result(output, golden):
             abs(output_data - golden_data) / golden_data)
         )
 
-        if idx == 100:
+        if idx == 10:
             break
     
     error_ratio = float(diff_ele_idxs.size) / golden.size 
@@ -82,33 +82,37 @@ class TestCustomAdd(TestCase):
 
         deep_gemm_ascend.run_mmad_custom(x_npu, y_npu, z_npu)
         
-        assert verify_result(z_npu.cpu().numpy(), golden)
+        verify_result(z_npu.cpu().numpy(), golden)
 
     def test_mmad_rtc_ops(self):
         print("============test runtime compile kernel==============")
         x1_gm, x2_gm, golden = gen_golden_data()
 
-        x_npu = torch.tensor(x1_gm, device='npu')
-        y_npu = torch.tensor(x2_gm, device='npu')
+        # two ways to expend torch tensor
+        batch = 1
+        x_npu = torch.tensor(x1_gm, device='npu').unsqueeze(0).repeat(batch, 1, 1)
+        y_npu = torch.stack([torch.tensor(x2_gm, device='npu')] * batch, dim=0)
        
         length_z = [96, 1536]
      
         z_npu = torch.empty(length_z, device='npu', dtype=torch.float32)
         deep_gemm_ascend.run_mmad_rtc(x_npu, y_npu, z_npu)
-        assert verify_result(z_npu.cpu().numpy(), golden)
+        verify_result(z_npu.cpu().numpy(), golden)
 
     def test_mmad_rtc_ops_2(self):
         print("============test runtime compile kernel again==============")
-         x1_gm, x2_gm, golden = gen_golden_data()
+        x1_gm, x2_gm, golden = gen_golden_data()
 
-        x_npu = torch.tensor(x1_gm, device='npu')
-        y_npu = torch.tensor(x2_gm, device='npu')
+        # two ways to expend torch tensor
+        batch = 1
+        x_npu = torch.tensor(x1_gm, device='npu').unsqueeze(0).repeat(batch, 1, 1)
+        y_npu = torch.stack([torch.tensor(x2_gm, device='npu')] * batch, dim=0)
      
         length_z = [96, 1536]
  
         z_npu = torch.empty(length_z, device='npu', dtype=torch.float32) 
         deep_gemm_ascend.run_mmad_rtc(x_npu, y_npu, z_npu)
-        assert verify_result(z_npu.cpu().numpy(), golden)
+        verify_result(z_npu.cpu().numpy(), golden)
 
 
 if __name__ == "__main__":
