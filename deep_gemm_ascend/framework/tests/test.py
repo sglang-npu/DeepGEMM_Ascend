@@ -99,7 +99,7 @@ class TestCustomAdd(TestCase):
 
     def test_mmad_rtc_ops_2(self):
         print("============test runtime compile kernel again==============")
-         x1_gm, x2_gm, golden = gen_golden_data()
+        x1_gm, x2_gm, golden = gen_golden_data()
 
         x_npu = torch.tensor(x1_gm, device='npu')
         y_npu = torch.tensor(x2_gm, device='npu')
