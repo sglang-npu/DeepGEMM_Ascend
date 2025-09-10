@@ -7,8 +7,8 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # ===============================================================================
-
 import torch
+import numpy as np 
 import torch_npu
 from torch_npu.testing.testcase import TestCase, run_tests
 import sys, os
@@ -37,13 +37,13 @@ def gen_golden_data():
     x1_gm = heavy_tail([M, K])
     x2_gm = heavy_tail([K, N])
 
-    golden = (npu.matmul(x1_gm.astype(np.float32), x2_gm.astype(np.float32))).astype(np.float32)
+    golden = (np.matmul(x1_gm.astype(np.float32), x2_gm.astype(np.float32))).astype(np.float32)
     return x1_gm, x2_gm, golden 
 
 def verify_result(output, golden):
     output = output.reshape(-1)
     print(f"{output=}")
-    printf(f"{output.shape=}")
+    print(f"{output.shape=}")
 
     golden = golden.reshape(-1)
     diff_ele_result = np.isclose(output,
@@ -57,7 +57,8 @@ def verify_result(output, golden):
         golden_data = golden[real_idx]
         output_data = output[real_idx]
         print(
-            "data index: %06d, excepted: %-.9f， actual: %-.9f，rdiff: %-.6f" % (real_idx, golden_data, output_data, abs(output_data - golden_data) / golden_data)
+            "data index: %06d, excepted: %-.9f， actual: %-.9f，rdiff: %-.6f" % (real_idx, golden_data, output_data, 
+            abs(output_data - golden_data) / golden_data)
         )
 
         if idx == 100:
@@ -81,7 +82,7 @@ class TestCustomAdd(TestCase):
         length_z = [96, 1536]
         # x = torch.rand(length_x, device='cpu', dtype=torch.float16)
         # y = torch.rand(length_y, device='cpu', dtype=torch.float16)
-        z_npu = torch.empty(length_z, device='cpu', dtype=torch.float16) # 要改成float32吗？ 
+        z_npu = torch.empty(length_z, device='cpu', dtype=torch.float32) # 要改成float32吗？ 
 
         deep_gemm_ascend.run_mmad_custom(x_npu, y_npu, z_npu)
         # cpuout = x.float() @ y.float()
