@@ -42,10 +42,8 @@ def gen_golden_data():
 
 def verify_result(output, golden):
     output = output.reshape(-1)
-    print(f"{output=}")
-    print(f"{output.shape=}")
-
     golden = golden.reshape(-1)
+    
     diff_ele_result = np.isclose(output,
                                  golden, 
                                  rtol=relative_tol,
