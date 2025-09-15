@@ -57,8 +57,14 @@ Args get_best_config(uint32_t batch, uint32_t m, uint32_t n, uint32_t k) {
 
     args.k_iters = (args.k_blocks + args.k_o_iter_blocks - 1) / args.k_o_iter_blocks;
     uint32_t k_tail_blocks = args.k_blocks % args.k_o_iter_blocks;
-    args.r_k_blocks = k_tail_blocks % args.db_o_blocks;
-    args.r_db_num = (k_tail_blocks + args.db_o_blocks - 1) / args.db_o_blocks;
+    if (k_tail_blocks ==0) {
+        args.r_db_num = args.db_o_num;
+        args.r_k_blocks = args.db_o_blocks;
+    }
+    else {
+        args.r_db_num = (k_tail_blocks + args.db_o_blocks - 1) / args.db_o_blocks;
+        args.r_k_blocks = k_tail_blocks - ((args.r_db_num - 1) * args.db_o_blocks);
+    }
 
     uint32_t m_iters = (args.m_blocks + args.m_sec_o_blocks - 1) / args.m_sec_o_blocks;
     uint32_t n_iters = (args.n_blocks + args.n_sec_o_blocks - 1) / args.n_sec_o_blocks;
