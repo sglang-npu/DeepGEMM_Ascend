@@ -12,11 +12,7 @@ import numpy as np
 import torch_npu
 from torch_npu.testing.testcase import TestCase, run_tests
 import sys, os
-
-sys.path.append(os.getcwd())
-print('lt cur path: ',os.getcwd)
 import deep_gemm_ascend
-print('lt get dga module path', deep_gemm_ascend.__file__)
 
 torch.npu.config.allow_internal_format = False
 relative_tol = 1e-6
@@ -69,16 +65,16 @@ def verify_result(output, golden):
 class TestCustomAdd(TestCase):
 
     def test_mmad_custom_ops(self):
-        return
+        # return
         print("============test api kernel==============")
         x1_gm, x2_gm, golden = gen_golden_data()
 
         x_npu = torch.tensor(x1_gm, device='npu')
         y_npu = torch.tensor(x2_gm, device='npu')
         
-        length_z = [x_npu.size(1), y_npu.size(2)]
+        length_z = [x_npu.size(0), y_npu.size(1)]
        
-        z_npu = torch.empty(length_z, device='npu', dtype=torch.float32)  
+        z_npu = torch.zeros(length_z, device='npu', dtype=torch.float32)  
 
         deep_gemm_ascend.run_mmad_custom(x_npu, y_npu, z_npu)
         
@@ -96,7 +92,7 @@ class TestCustomAdd(TestCase):
        
         length_z = [x_npu.size(1), y_npu.size(2)]
      
-        z_npu = torch.empty(length_z, device='npu', dtype=torch.float32)
+        z_npu = torch.zeros(length_z, device='npu', dtype=torch.float32)
         deep_gemm_ascend.run_mmad_rtc(x_npu, y_npu, z_npu)
         verify_result(z_npu.cpu().numpy(), golden)
 
@@ -112,7 +108,7 @@ class TestCustomAdd(TestCase):
      
         length_z = [x_npu.size(1), y_npu.size(2)]
  
-        z_npu = torch.empty(length_z, device='npu', dtype=torch.float32) 
+        z_npu = torch.zeros(length_z, device='npu', dtype=torch.float32) 
         deep_gemm_ascend.run_mmad_rtc(x_npu, y_npu, z_npu)
         verify_result(z_npu.cpu().numpy(), golden)
 

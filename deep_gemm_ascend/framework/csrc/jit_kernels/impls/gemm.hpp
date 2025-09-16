@@ -96,8 +96,6 @@ static void mmad_rtc(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
     };
     const auto& code = RTCRuntime::generate(args);
     // 3 build code
-    std::shared_ptr<CMakeCompiler> compiler = std::make_shared<CMakeCompiler>();
-
     const Compiler::CompileArgs& compile_args = {
         .m = m, .n = n, .k = k,
         .kernelType = 0,

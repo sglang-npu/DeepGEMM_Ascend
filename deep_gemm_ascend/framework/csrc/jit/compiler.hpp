@@ -105,4 +105,5 @@ private:
     std::string socVersion_;
 };
 
+static auto compiler = std::make_shared<CMakeCompiler>();
 } // namespace deep_gemm_ascend
