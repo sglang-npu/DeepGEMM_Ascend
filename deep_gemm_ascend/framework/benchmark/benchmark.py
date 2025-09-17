@@ -1,0 +1,332 @@
+
+from typing import List, Dict, Any 
+from torch import Tensor
+from dataclasses import dataclass, asdict, field
+from pathlib import Path
+from tqdm import tqdm
+import os
+import json
+import matplotlib.pyplot as plt
+
+shape_group = [
+    [8, 4096, 7168],
+    [8, 7168, 18432],
+    [8, 18432, 7168],
+    [64, 4096, 7168],
+    [64, 7168, 18432],
+    [64, 18432, 7168],
+    [64, 24576, 1536],
+    [64, 32768, 512],
+    [64, 7168, 16384],
+    [128, 4096, 7168],
+    [128, 7168, 18432],
+    [128, 18432, 7168],
+    [1024, 4096, 7168],
+    [1024, 18432, 7168],
+    [2048, 4096, 7168],
+    [4096, 4096, 7168]
+]
+
+class Parameter():
+    def __init__(self):
+        # self.all_parameters = self.init_generate_parameters()
+        self.grid_parameters = self.grid_generate_parameters()
+    
+    def generate_mn_sections(self):
+        # Rule 1：m_sections × n_sections <= 24
+        for m_sections in range(1, 25):
+            max_n_sections = min(24, 24 // m_sections)
+            for n_sections in range(1, max_n_sections + 1):
+                yield (m_sections, n_sections)
+
+    # 网格调参
+    def generate_mn_sections_linear(self):
+        m_sections_values = [1, 2, 3, 4, 6, 8, 12, 16, 20, 24]
+        n_sections_values = [1, 2, 3, 4, 6, 8, 12, 16, 20, 24]
+        
+        for m_sections in m_sections_values:
+            max_n_sections = 24 // m_sections
+            n_sections_valid_values = [n for n in n_sections_values if n <= max_n_sections]
+
+            for n_sections in n_sections_valid_values:
+                yield (m_sections, n_sections)
+
+    def generate_mnk_db_o_blocks(self):
+        for m_sec_o_blocks in range(1, 128):
+            for n_sec_o_blocks in range(1, 128 - m_sec_o_blocks):
+                sum_mn = m_sec_o_blocks + n_sec_o_blocks
+                # Rule 2：(m + n) × k < 1024 → k < 1024/(m + n)
+                max_k = 1023 // sum_mn
+                
+                # Rule 3：m_sec_o_blocks × db_o_blocks <= 128 && n_sec_o_blocks × db_o_blocks <= 128 → db_o_blocks <= min(128/m_sec_o_blocks, 128/m_sec_o_blocks)
+                max_db_from_m = 128 // m_sec_o_blocks
+                max_db_from_n = 128 // n_sec_o_blocks
+                max_db = min(max_db_from_m, max_db_from_n)
+                for k_o_iter_blocks in range(1, max_k + 1):
+                    for db_o_blocks in range(1, max_db + 1):
+                        yield (m_sec_o_blocks, n_sec_o_blocks, k_o_iter_blocks, db_o_blocks)
+
+    def generate_mnk_db_o_blocks_linear(self):
+        m_sec_o_blocks_values = [2, 4, 8, 16, 24, 32, 48, 64, 96, 128]
+        n_sec_o_blocks_values = [2, 4, 8, 16, 24, 32, 48, 64, 96, 128]
+        k_o_iter_blocks_values = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+        db_o_blocks_values = [1, 2, 4, 8, 16, 32, 64]
+        
+        for m_sec_o_blocks in m_sec_o_blocks_values:
+            for n_sec_o_blocks in n_sec_o_blocks_values:
+                sum_mn = m_sec_o_blocks + n_sec_o_blocks
+                # Rule 2：(m + n) × k < 1024 → k < 1024/(m + n)
+                max_k = 1023 // sum_mn
+
+                for k_o_iter_blocks in k_o_iter_blocks_values:
+                    # Rule 3：m_sec_o_blocks × db_o_blocks <= 128 && n_sec_o_blocks × db_o_blocks <= 128 → db_o_blocks <= min(128/m_sec_o_blocks, 128/m_sec_o_blocks)
+                    if k_o_iter_blocks > max_k:
+                        continue
+
+                    max_db_o_blocks_from_m = 128 // m_sec_o_blocks
+                    max_db_o_blocks_from_n = 128 // n_sec_o_blocks
+                    max_db_o_blocks = min(max_db_o_blocks_from_m, max_db_o_blocks_from_n)
+
+                    for db_o_blocks in db_o_blocks_values:
+                        if db_o_blocks > max_db_o_blocks:
+                            continue
+                        yield (m_sec_o_blocks, n_sec_o_blocks, k_o_iter_blocks, db_o_blocks)
+
+    # 满足约束条件的所有参数组合
+    def init_generate_parameters(self):
+        mn_sections_list = list(self.generate_mn_sections())
+        o_blocks_list = list(self.generate_mnk_db_o_blocks())
+        parameters = []
+        print(f'mn_sections_list len:{len(mn_sections_list)}')
+        print(f'o_blocks_list len:{len(o_blocks_list)}')
+
+        for (m_sections, n_sections) in mn_sections_list:
+            for (m_sec_o_blocks, n_sec_o_blocks, k_o_iter_blocks, db_o_blocks) in o_blocks_list:
+                param_dic = {
+                    'm_sections': m_sections,
+                    'n_sections': n_sections,
+                    'm_sec_o_blocks': m_sec_o_blocks,
+                    'n_sec_o_blocks': n_sec_o_blocks,
+                    'k_o_iter_blocks': k_o_iter_blocks,
+                    'db_o_blocks': db_o_blocks
+                }
+                parameters.append(param_dic)
+
+        print(f'Init valid parameter group {len(parameters)}')
+        return parameters
+
+    def grid_generate_parameters(self):
+        mn_sections_list = list(self.generate_mn_sections_linear())
+        o_blocks_list = list(self.generate_mnk_db_o_blocks_linear())
+        parameters = []
+        print(f'mn_sections_list len:{len(mn_sections_list)}')
+        print(f'o_blocks_list len:{len(o_blocks_list)}')
+
+        for (m_sections, n_sections) in mn_sections_list:
+            for (m_sec_o_blocks, n_sec_o_blocks, k_o_iter_blocks, db_o_blocks) in o_blocks_list:
+                param_dic = {
+                    'm_sections': m_sections,
+                    'n_sections': n_sections,
+                    'm_sec_o_blocks': m_sec_o_blocks,
+                    'n_sec_o_blocks': n_sec_o_blocks,
+                    'k_o_iter_blocks': k_o_iter_blocks,
+                    'db_o_blocks': db_o_blocks
+                }
+                parameters.append(param_dic)
+
+        print(f'Grid valid parameter group {len(parameters)}')
+        return parameters
+
+
+@dataclass
+class Result():
+    M: int
+    N: int
+    K: int
+    time: float
+    parameters: Dict[str, int] = field(default_factory=lambda:{
+        'm_sections': 0,
+        'n_sections': 0,
+        'm_sec_o_blocks': 0,
+        'n_sec_o_blocks': 0,
+        'k_o_iter_blocks': 0,
+        'db_o_blocks': 0
+    })
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Result':
+        """Create a Result object from a dictionary"""
+        return cls(
+            M=data['M'],
+            N=data['N'],
+            K=data['K'],
+            time=data['time'],
+            idx=data['idx'],
+            parameters=data.get('parameters', {})
+        )
+
+class GEMMBenchmarkRunner():
+    def __init__(self, shape_group, result_path="./benchmark_output.jsonl"):
+        self.shape_group = shape_group
+        self.result_path = result_path
+        self.parameters = Parameter()
+    
+    def benchmark_shape(self, shape: list) -> List[Result]:
+        # gen_data -> deepgemm_gemm && cann_gemm -> is_correct -> ms_prof -> save_result
+        A, B = self.gen_data(shape)
+        gold = self.cann_gemm(A, B)
+        results = []
+
+        total_params = len(self.parameters.grid_parameters)
+        with tqdm(total=total_params, desc=f"Testing shape {shape}") as pbar:
+            for idx, parameters in enumerate(self.parameters.grid_parameters):
+                output = self.deepgemm_gemm(A, B, parameters)
+                
+                if self.is_correct(gold, output):
+                    # todo:
+                    time_us = self.ms_prof()
+                    result = Result(
+                        M=shape[0],
+                        N=shape[1],
+                        K=shape[2],
+                        time=time_us,
+                        idx=idx,
+                        parameters=parameters
+                    )
+                    results.append(result)
+                
+                pbar.update(1)
+                pbar.set_postfix({
+                    'curren': idx + 1,
+                    'valid': len(results)
+                })
+
+        return results
+
+    def gen_data(self, shape: list) -> tuple[Tensor, Tensor]:
+        pass
+    
+    def deepgemm_gemm(self, A: Tensor, B: Tensor, parameters: dict) -> Tensor:
+        pass
+
+    def cann_gemm(self, A: Tensor, B: Tensor) -> Tensor:
+        pass
+    
+    def is_correct(self, cann_result: Tensor, deepgemm_result: Tensor) -> bool:
+        pass
+
+    def ms_prof(self, output_path: str, kernel_path: str) -> float:
+        pass
+    
+    def save_result(self, results: list, path: str) -> None:
+        Path(path).parent.mkdir(parent=True, exist_ok=True)
+
+        result_dicts = []
+        for result in results:
+            if is_dataclass(result):
+                result_dicts.append(asdict(result))
+            else:
+                result_dicts.append(dict(result))
+        
+        try:
+            with open(path, 'a', encoding='utf-8') as f:
+                for result_dict in result_dicts:
+                    json.dump(result_dict, f, ensure_ascii=False)
+                    f.write('\n')
+        except IOError as e:
+            print(f"save files error: {e}")
+        except Exception as e:
+            print(f"process data error: {e}")
+    
+    def run_benchmarks(self) -> None:
+        print("=====STARTING GEMM BENCHMARK=====")
+
+        for shape in self.shape_group:
+            results = self.benchmark_shape(shape)
+            self.save_result(results, self.result_path)
+    
+    def visualize_time_with_single_parameter(self, shape: list, target_parameter: str, other_parameters: dict) -> None:
+        if not os.path.exists(self.result_path):
+            raise FileNotFoundError(f"File not found: {self.result_path}")
+        
+        results: List[Result] = []
+        with open(self.result_path, 'r') as f:
+            for line in f:
+                try:
+                    data = json.loads(line.strip())
+                    results.append(Result.from_dict(data))
+                except json.JSONDecodeError:
+                    print(f"Warning: Could not parse line content: {line}")
+                    continue
+        
+        if not results:
+            print("No valid Result data was read")
+            return
+        
+        # 检查shape合法性
+        if len(shape) != 3:
+            raise ValueError(f"shape must contain exactly 3 elements [M, N, K], got {len(shape)}")
+        try:
+            target_M, target_N, target_K = map(int, shape)
+        except (ValueError, TypeError):
+            raise ValueError(f"shape must contain integer values, got {shape}")
+
+        # 检查target_parameter合法性
+        valid_parameters = results[0].parameters.keys()
+        if target_parameter not in valid_parameters:
+            raise ValueError(f"Target parameter '{target_parameter}' is not valid. Valid parameters: {valid_parameters}")
+        
+        # 检查other_parameters合法性
+        if len(other_parameters) != 5:
+            raise ValueError(f"other_parameters must contain exactly 5 parameters, got {len(other_parameters)}")
+        for param in other_parameters:
+            if param not in valid_parameters:
+                raise ValueError(f"Parameter '{param}' in other_parameters is not valid. Valid parameters: {valid_parameters}")
+            if param == target_parameter:
+                raise ValueError(f"target_parameter '{target_parameter}' cannot be in other_parameters")
+        
+        filtered_data = []
+        for result in results:
+            if result.M != target_M or result.N != target_N or result.K != target_K:
+                continue
+                
+            match = True
+            for param, value in other_parameters.items():
+                if result.parameters.get(param, None) != value:
+                    match = False
+                    break
+            
+            if match and target_parameter in result.parameters:
+                filtered_data.append((
+                    result.parameters[target_parameter],
+                    result.time
+                ))
+        
+        if not filtered_data:
+            print(f"No data found matching criteria. Target parameter: {target_parameter}, Other parameters: {other_parameters}")
+            return
+        
+        filtered_data.sort(key=lambda x: x[0])
+        param_values, times = zip(*filtered_data)
+        
+        plt.figure(figsize=(10, 6))
+        plt.plot(param_values, times, 'b-', marker='o', markersize=8, linewidth=2, label=f'Time vs {target_parameter}')
+        other_params_str = ", ".join([f"{k}={v}" for k, v in other_parameters.items()])
+        plt.title(f'Time vs {target_parameter}\nOther parameters: {other_params_str}', fontsize=14)
+        plt.xlabel(target_parameter, fontsize=12)
+        plt.ylabel('Time (us)', fontsize=12)
+        plt.grid(True, linestyle='--', alpha=0.7)
+        plt.legend()
+        plt.tight_layout()
+
+        filename = f"time_vs_{target_parameter}_M{target_M}_N{target_N}_K{target_K}.png"
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        print(f"Plot saved to current directory as: {filename}")
+
+if __name__ == "__main__":
+    # parameters = Parameter()
+    benchmark_runner = GEMMBenchmarkRunner(shape_group)
+    shape = [1024, 512, 256]
+    target_parameter = "m_sections"
+    other_parameters = {"n_sections": 4, "m_sec_o_blocks": 8, "n_sec_o_blocks": 8, "k_o_iter_blocks": 16, "db_o_blocks": 4}
+    benchmark_runner.visualize_time_with_single_parameter(shape, target_parameter, other_parameters)
