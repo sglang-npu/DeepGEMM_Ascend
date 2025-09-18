@@ -90,7 +90,7 @@ class Parameter():
 
                     max_db_o_blocks_from_m = 128 // m_sec_o_blocks
                     max_db_o_blocks_from_n = 128 // n_sec_o_blocks
-                    max_db_o_blocks = min(max_db_o_blocks_from_m, max_db_o_blocks_from_n)
+                    max_db_o_blocks = min([max_db_o_blocks_from_m, max_db_o_blocks_from_n, k_o_iter_blocks])
 
                     for db_o_blocks in db_o_blocks_values:
                         if db_o_blocks > max_db_o_blocks:
@@ -198,7 +198,7 @@ class GEMMBenchmarkRunner():
                     if result['idx'] > max_saved_idx:
                         max_saved_idx = result['idx']
 
-        start_idx = max_saved_idx + 1 if max_saved_idx >= 0 else 0
+        start_idx = max_saved_idx + 1 if max_saved_idx >= 0 else 1
         results = []
         total_params = len(self.parameters.grid_parameters)
         with tqdm(total=total_params, initial=start_idx, desc=f"Testing shape {shape}", postfix={"Proccessed": start_idx, "Valid": saved_count}) as pbar:
@@ -220,15 +220,15 @@ class GEMMBenchmarkRunner():
                     results.append(result)
                     saved_count += 1
                 
-                if len(results) == 100 or idx == total_params - 1:
+                if len(results) == 100 or idx + 1 == total_params:
                     if results:
                         self.save_result(results, result_path)
                         results = []
 
                 pbar.update(1)
                 pbar.set_postfix({
-                    'curren': idx + 1,
-                    'valid': saved_count
+                    'Processed': idx,
+                    'Value': saved_count
                 })
 
         return
