@@ -30,10 +30,10 @@ public:
             compile_args.m, compile_args.n, compile_args.k, compile_args.kernelType);
         std::string kernel_dir = fmt::format("{}/deep_gemm_ascend/cache/kernel_{}/", rootPath_, kernel_signature);
         if (const auto& runtime = kernel_runtime_cache->get(kernel_dir); runtime != nullptr) {
-            std::cout << "use kernel cache" << std::endl;
+            // std::cout << "use kernel cache" << std::endl;
             return runtime;
         }
-        std::cout << "compile new kernel" << std::endl;
+        // std::cout << "compile new kernel" << std::endl;
 
         // 2 compile new cache
         // 2.1 put code to code path
@@ -56,7 +56,7 @@ private:
     void OutputKernelFile(const std::string& code, const std::filesystem::path& code_path) const
     {
         // put code to code path
-        std::cout << "put code to code path: " << code_path << std::endl;
+        // std::cout << "put code to code path: " << code_path << std::endl;
         std::ofstream ofs(code_path);
         ofs << code;
         ofs.close();
@@ -80,16 +80,16 @@ public:
             " -DSOC_VERSION=" + socVersion_ +
             " -DKERNEL_SRC_PATH=" + kernel_dir + utils::KERNEL_CODE_NAME +
             " && cmake --build " + buildPath;
-        std::cout << "run cmake command: " << command << std::endl;
+        // std::cout << "run cmake command: " << command << std::endl;
         const auto& [return_code, output] = call_external_command(command);
-        std::cout << "run cmake command result: " << return_code << std::endl;
+        // std::cout << "run cmake command result: " << return_code << std::endl;
         // std::cout << "run cmake command output: " << output << std::endl;
     
         // 2. copy kernel bin to code directory
         std::string bin_path = cmake_dir + "/out/fatbin/mmad_kernels/" + utils::KERNEL_FATBIN_NAME;
         CopyBinFile(bin_path, kernel_dir);
         RemoveOriginBinDir(cmake_dir);
-        std::cout << "bin path : " << bin_path.c_str() << std::endl;
+        // std::cout << "bin path : " << bin_path.c_str() << std::endl;
     }
 
     ~CMakeCompiler() = default;
@@ -97,9 +97,9 @@ private:
     void CopyBinFile(const std::string& bin_path, const std::string& kernel_dir) const
     {
         std::string command = "cp -f " + bin_path + " " + kernel_dir;
-        std::cout << "run move command: " << command << std::endl;
+        // std::cout << "run move command: " << command << std::endl;
         const auto& [return_code, output] = call_external_command(command);
-        std::cout << "run move command result: " << return_code << std::endl;
+        // std::cout << "run move command result: " << return_code << std::endl;
     }
 
     void RemoveOriginBinDir(const std::string& cmake_dir) const
@@ -108,9 +108,9 @@ private:
             return;
         }
         std::string command = "rm -rf " + cmake_dir + "/out";
-        std::cout << "run remove command: " << command << std::endl;
+        // std::cout << "run remove command: " << command << std::endl;
         const auto& [return_code, output] = call_external_command(command);
-        std::cout << "run remove command result: " << return_code << std::endl;
+        // std::cout << "run remove command result: " << return_code << std::endl;
     }
 
     std::string rootPath_;

@@ -11,6 +11,8 @@ import json
 import matplotlib.pyplot as plt
 import numpy as np
 
+import deep_gemm_ascend
+
 shape_group = [
     [8, 4096, 7168],
     # [8, 7168, 18432],
@@ -169,6 +171,7 @@ class Result():
             parameters=data.get('parameters', {})
         )
 
+
 class GEMMBenchmarkRunner():
     def __init__(self, shape_group, result_path="./benchmark_output.jsonl"):
         self.shape_group = shape_group
@@ -228,8 +231,15 @@ class GEMMBenchmarkRunner():
         return (A_npu, B_npu)
 
     def deepgemm_gemm(self, A: Tensor, B: Tensor, parameters: dict) -> Tensor:
-        out = torch.matmul(A, B)
-        return out
+        param_list = list(parameters.values())
+        param_list.extend([0] * 22)
+        param_npu = torch.tensor(param_list, device='npu', dtype=torch.int32)
+        
+        z_shape = [A.size(0), B.size(1)]
+        z_npu = torch.zeros(z_shape, device='npu', dtype=torch.int32)
+
+        deep_gemm_ascend.run_mmad_bench(A, B, z_npu, param_npu)
+        return z_npu
 
     def cann_gemm(self, A: Tensor, B: Tensor) -> Tensor:
         out = torch.matmul(A, B)
@@ -349,7 +359,19 @@ if __name__ == "__main__":
     # parameters = Parameter()
     benchmark_runner = GEMMBenchmarkRunner(shape_group)
     benchmark_runner.run_benchmarks()
+
     # shape = [1024, 512, 256]
+    # param_dic = {
+    #     'm_sections': 1,
+    #     'n_sections': 1,
+    #     'm_sec_o_blocks': 3,
+    #     'n_sec_o_blocks': 8,
+    #     'k_o_iter_blocks': 20,
+    #     'db_o_blocks': 10
+    # }
+    # A, B = benchmark_runner.gen_data(shape)
+    # benchmark_runner.deepgemm_gemm(A, B, param_dic)
+
     # target_parameter = "m_sections"
     # other_parameters = {"n_sections": 4, "m_sec_o_blocks": 8, "n_sec_o_blocks": 8, "k_o_iter_blocks": 16, "db_o_blocks": 4}
     # benchmark_runner.visualize_time_with_single_parameter(shape, target_parameter, other_parameters)

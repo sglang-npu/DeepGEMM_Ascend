@@ -18,19 +18,20 @@ void run_mmad_custom(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
 
 void run_mmad_rtc(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
 {
-    std::cout << "now in deepgemm ascend run_mmad_rtc!!!" << std::endl;
+    // std::cout << "now in deepgemm ascend run_mmad_rtc!!!" << std::endl;
     mmad_rtc(x, y, z);
 }
 
 void run_mmad_bench(const at::Tensor &x, const at::Tensor &y, at::Tensor &z, at::Tensor &params)
 {
-    std::cout << "now in deepgemm ascend run_mmad_bench!!!" << std::endl;
+    // std::cout << "now in deepgemm ascend run_mmad_bench!!!" << std::endl;
     mmad_bench(x, y, z, params);
 }
 
 void grouped_gemm_int8_int8_bf16_nt(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
 {
-    std::cout << "now in deepgemm ascend code!!!" << std::endl;
+    // std::cout << "now in deepgemm ascend code!!!" << std::endl;
+    return;
 }
 }
 

@@ -164,7 +164,7 @@ R"(
 
         AscendC::GlobalTensor<half> bGM;
         bGM.SetGlobalBuffer((__gm__ half *)b);
-        AscendC::TQue<AscendC::TPosition::A1, 1> inQueueB1;
+        AscendC::TQue<AscendC::TPosition::B1, 1> inQueueB1;
         pipe.InitBuffer(inQueueB1, 2, b_buffer_size * sizeof(half));
 
         AscendC::GlobalTensor<float> cGM;

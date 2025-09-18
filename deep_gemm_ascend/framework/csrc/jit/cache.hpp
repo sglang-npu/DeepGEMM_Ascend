@@ -18,12 +18,12 @@ public:
         // Hit the runtime cache
         const auto& iterator = cache.find(kernel_dir);
         if (iterator != cache.end()) {
-            std::cout << "use kernel cache in map" << std::endl;
+            // std::cout << "use kernel cache in map" << std::endl;
             return iterator->second;
         }
 
         if (KernelRuntime::check_validity(kernel_dir)) {
-            std::cout << "make kernel cache from dir" << std::endl;
+            // std::cout << "make kernel cache from dir" << std::endl;
             return cache[kernel_dir] = std::make_shared<KernelRuntime>(kernel_dir);
         }
         return nullptr;
