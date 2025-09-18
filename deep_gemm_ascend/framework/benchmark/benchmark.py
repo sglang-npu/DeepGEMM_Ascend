@@ -204,13 +204,33 @@ class GEMMBenchmarkRunner():
         return results
 
     def gen_data(self, shape: list) -> tuple[Tensor, Tensor]:
-        pass
+        device = torch.device("npu" if torch.npu.is_available() else "cpu")
+        if device.type == "cpu":
+            print("Warning: NPU不可用，将在CPU上运行！")
+
+        M, N, K = shape
+
+        rng = np.random.default_rng()
+
+        def heavy_tail(shape):
+            v = rng.lognormal(mean=1.0, sigma=1.2, size=shape)
+            return np.clip(v, 1, 10).astype(np.float16)
+        
+        A = heavy_tail([M, K])
+        B = heavy_tail([K, N])
+
+        A_npu = torch.tensor(A, device=device)
+        B_npu = torch.tensor(B, device=device)
+        return (A, B)
     
     def deepgemm_gemm(self, A: Tensor, B: Tensor, parameters: dict) -> Tensor:
-        pass
+        m_sections, n_sections, m_sec_o_blocks, n_sec_o_blocks, k_o_iter_blocks, 
+        
 
     def cann_gemm(self, A: Tensor, B: Tensor) -> Tensor:
-        pass
+        out = torch.matmul(A, B)
+
+        return out
     
     def is_correct(self, cann_result: Tensor, deepgemm_result: Tensor) -> bool:
         pass
@@ -326,7 +346,7 @@ class GEMMBenchmarkRunner():
 if __name__ == "__main__":
     # parameters = Parameter()
     benchmark_runner = GEMMBenchmarkRunner(shape_group)
-    shape = [1024, 512, 256]
-    target_parameter = "m_sections"
-    other_parameters = {"n_sections": 4, "m_sec_o_blocks": 8, "n_sec_o_blocks": 8, "k_o_iter_blocks": 16, "db_o_blocks": 4}
-    benchmark_runner.visualize_time_with_single_parameter(shape, target_parameter, other_parameters)
+    # shape = [1024, 512, 256]
+    # target_parameter = "m_sections"
+    # other_parameters = {"n_sections": 4, "m_sec_o_blocks": 8, "n_sec_o_blocks": 8, "k_o_iter_blocks": 16, "db_o_blocks": 4}
+    # benchmark_runner.visualize_time_with_single_parameter(shape, target_parameter, other_parameters)
