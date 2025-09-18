@@ -13,6 +13,12 @@ import numpy as np
 
 import deep_gemm_ascend
 
+
+torch.npu.config.allow_internal_format = False
+relative_tol = 1e-6
+absolute_tol = 1e-9
+error_tol = 1e-4
+
 shape_group = [
     [8, 4096, 7168],
     # [8, 7168, 18432],
@@ -151,7 +157,7 @@ class Result():
     K: int
     time: float
     idx: int
-    # diff: float
+    diff: float
     parameters: Dict[str, int] = field(default_factory=lambda:{
         'm_sections': 0,
         'n_sections': 0,
@@ -204,8 +210,9 @@ class GEMMBenchmarkRunner():
         with tqdm(total=total_params, initial=start_idx, desc=f"Testing shape {shape}", postfix={"Proccessed": start_idx, "Valid": saved_count}) as pbar:
             for idx, parameters in enumerate(self.parameters.grid_parameters[start_idx:], start=start_idx):
                 output = self.deepgemm_gemm(A, B, parameters)
+                is_diff, diff_prop  = self.is_correct(gold, output)
                 
-                if self.is_correct(gold, output):
+                if is_diff:
                     # TODO:
                     time_us = self.ms_prof()
                     result = Result(
@@ -214,7 +221,7 @@ class GEMMBenchmarkRunner():
                         N=shape[1],
                         K=shape[2],
                         time=time_us,
-                        # diff=?
+                        diff= diff_prop,
                         parameters=parameters
                     )
                     results.append(result)
@@ -268,8 +275,34 @@ class GEMMBenchmarkRunner():
         out = torch.matmul(A, B)
         return out
 
-    def is_correct(self, cann_result: Tensor, deepgemm_result: Tensor) -> bool:
-        return True
+    def is_correct(self, cann_result: Tensor, deepgemm_result: Tensor) -> bool, float:
+        output = cann_result.cpu().numpy()
+        golden = deepgemm_result.cpu().numpy()
+
+        output = output.reshape(-1)
+        golden = golden.reshape(-1)
+
+        diff_ele_result = np.isclose(output,
+                                     golden,
+                                     rtol=relative_tol,
+                                     atol=absolute_tol,
+                                     equal_nan=True)
+        diff_ele_idxs = np.where(diff_ele_result == False)[0]
+        for idx in range(len(diff_ele_idxs)):
+            real_idx = diff_ele_idxs[idx]
+            golden_data = golden[real_idx]
+            output_data = output[real_idx]
+            print(
+                "data index: %06d, excepted: %-.9f， actual: %-.9f，rdiff: %-.6f" % (real_idx, golden_data, output_data,
+                                                                                   abs(output_data - golden_data) / golden_data)
+            )
+
+            if idx == 10:
+                break
+
+        error_ratio = float(diff_ele_idxs.size) / golden.size
+        print("error ratio: %.4f， tolerance： %.4f" % (error_ratio, error_tol))
+        return error_ratio <= error_tol, error_ratio
 
     def ms_prof(self, output_path: str, kernel_path: str) -> float:
         pass
