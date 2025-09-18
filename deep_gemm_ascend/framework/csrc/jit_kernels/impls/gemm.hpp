@@ -29,7 +29,7 @@ static void mmad_custom(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
 class RTCRuntime final : public LaunchRuntime<RTCRuntime> {
 public:
     struct Args {
-        int k_iters;
+        uint32_t k_iters;
         uint32_t batch;
 
         uint32_t m, n, k;
@@ -96,8 +96,6 @@ static void mmad_rtc(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
     };
     const auto& code = RTCRuntime::generate(args);
     // 3 build code
-    std::shared_ptr<CMakeCompiler> compiler = std::make_shared<CMakeCompiler>();
-
     const Compiler::CompileArgs& compile_args = {
         .m = m, .n = n, .k = k,
         .kernelType = 0,

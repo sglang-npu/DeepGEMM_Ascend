@@ -1,5 +1,7 @@
-#include <string>
+#ifndef GENERATE_CODE_HPP
+#define GENERATE_CODE_HPP
 
+#include <string>
 
 namespace deep_gemm_ascend{
 namespace utils{
@@ -57,8 +59,8 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
     uint32_t m_blocks = {}, n_blocks = {}, k_blocks = {};
     uint32_t m_sc_blocks = {}, n_sc_blocks = {};
 
-    uint32_t msec_o_blocks = {};
-    uint32_t nsec_o_blocks = {};
+    uint32_t m_sec_o_blocks = {};
+    uint32_t n_sec_o_blocks = {};
     uint32_t k_o_iter_blocks = {};
     uint32_t db_o_blocks = {};
 
@@ -72,6 +74,51 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
     uint32_t r_n_blocks = {};
     uint32_t r_k_blocks = {};
     uint32_t r_db_num = {};
+)";
+
+const std::string FILE_BENCH =
+R"(
+extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR c, GM_ADDR params)
+{
+    KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIC_ONLY);
+    AscendC::TPipe pipe;
+
+    bool init_zero = true;
+
+    AscendC::GlobalTensor<int> paramGM;
+    paramGM.SetGlobalBuffer((__gm__ int *)params);
+
+    uint32_t m_sections = paramGM.GetValue(0);
+    uint32_t n_sections = paramGM.GetValue(1);
+    uint32_t m_sec_o_blocks = paramGM.GetValue(2);
+    uint32_t n_sec_o_blocks = paramGM.GetValue(3);
+    uint32_t k_o_iter_blocks = paramGM.GetValue(4);
+    uint32_t db_o_blocks = paramGM.GetValue(5);
+    uint32_t m = paramGM.GetValue(6);
+    uint32_t k = paramGM.GetValue(7);
+    uint32_t n = paramGM.GetValue(8);
+    uint32_t batch = paramGM.GetValue(9);
+    int k_iters = paramGM.GetValue(10);
+    uint32_t m_blocks = paramGM.GetValue(11);
+    uint32_t n_blocks = paramGM.GetValue(12);
+    uint32_t k_blocks = paramGM.GetValue(13);
+    uint32_t m_sc_blocks = paramGM.GetValue(14);
+    uint32_t n_sc_blocks = paramGM.GetValue(15);
+
+    uint32_t m_o_fix = paramGM.GetValue(16);
+    uint32_t n_o_fix = paramGM.GetValue(17);
+    uint32_t k_o_fix = paramGM.GetValue(18);
+    uint32_t db_o_num = paramGM.GetValue(19);
+
+    uint32_t m_parts = paramGM.GetValue(20);
+    uint32_t n_parts = paramGM.GetValue(21);
+    uint32_t r_m_parts = paramGM.GetValue(22);
+    uint32_t r_n_parts = paramGM.GetValue(23);
+
+    uint32_t r_m_blocks = paramGM.GetValue(24);
+    uint32_t r_n_blocks = paramGM.GetValue(25);
+    uint32_t r_k_blocks = paramGM.GetValue(26);
+    uint32_t r_db_num = paramGM.GetValue(27);
 )";
 
 const std::string FILE_EXEC =
@@ -106,9 +153,9 @@ R"(
         offsetB += nCoreIndx * BlockLen(n_sc_blocks);
         offsetC += mCoreIndx * n * BlockLen(m_sc_blocks) + nCoreIndx * BlockLen(n_sc_blocks);
 
-        int a_buffer_size = BlockSize(msec_o_blocks * k_o_iter_blocks);
-        int b_buffer_size = BlockSize(nsec_o_blocks * k_o_iter_blocks);
-        int c_buffer_size = BlockSize(msec_o_blocks * nsec_o_blocks);
+        int a_buffer_size = BlockSize(m_sec_o_blocks * k_o_iter_blocks);
+        int b_buffer_size = BlockSize(n_sec_o_blocks * k_o_iter_blocks);
+        int c_buffer_size = BlockSize(m_sec_o_blocks * n_sec_o_blocks);
 
         AscendC::GlobalTensor<half> aGM;
         aGM.SetGlobalBuffer((__gm__ half *)a);
@@ -128,9 +175,9 @@ R"(
         AscendC::LocalTensor<float> c1Local = outQueueCO1.AllocTensor<float>();
 
         AscendC::TQue<AscendC::TPosition::A2, 1> inQueueA2;
-        pipe.InitBuffer(inQueueA2, 1, BlockSize(msec_o_blocks * db_o_blocks) * sizeof(half));
+        pipe.InitBuffer(inQueueA2, 1, BlockSize(m_sec_o_blocks * db_o_blocks) * sizeof(half));
         AscendC::TQue<AscendC::TPosition::B2, 1> inQueueB2;
-        pipe.InitBuffer(inQueueB2, 1, BlockSize(db_o_blocks * nsec_o_blocks) * sizeof(half));
+        pipe.InitBuffer(inQueueB2, 1, BlockSize(db_o_blocks * n_sec_o_blocks) * sizeof(half));
 
         AscendC::LocalTensor<half> a1Local, b1Local, a1, b1;
         AscendC::LocalTensor<half> a2Local, b2Local, a2, b2;
@@ -151,7 +198,7 @@ R"(
             }
             else
             {
-                msec_blocks = msec_o_blocks;
+                msec_blocks = m_sec_o_blocks;
                 m_fix = 0;
             }
 
@@ -164,7 +211,7 @@ R"(
                 }
                 else
                 {
-                    nsec_blocks = nsec_o_blocks;
+                    nsec_blocks = n_sec_o_blocks;
                     n_fix = 0;
                 }
 
@@ -183,7 +230,7 @@ R"(
                     }
 
                     a1Local = inQueueA1.AllocTensor<half>();
-                    a_offset = CalcAOffset(mi, k, msec_o_blocks, ki, k_o_iter_blocks);
+                    a_offset = CalcAOffset(mi, k, m_sec_o_blocks, ki, k_o_iter_blocks);
                     nd2nzParams.ndNum = 1;
                     nd2nzParams.nValue = BlockLen(msec_blocks);
                     nd2nzParams.dValue = BlockLen(k_iter_blocks);
@@ -195,7 +242,7 @@ R"(
                     AscendC::DataCopy(a1Local, aGM[offsetA + a_offset], nd2nzParams);
 
                     b1Local = inQueueB1.AllocTensor<half>();
-                    b_offset = CalcBOffset(ni, n, k_o_iter_blocks, ki, nsec_o_blocks);
+                    b_offset = CalcBOffset(ni, n, k_o_iter_blocks, ki, n_sec_o_blocks);
                     nd2nzParams.ndNum = 1;
                     nd2nzParams.nValue = BlockLen(k_iter_blocks);
                     nd2nzParams.dValue = BlockLen(nsec_blocks);
@@ -229,7 +276,7 @@ R"(
                         b2Local = inQueueB2.AllocTensor<half>();
 
                         dstOffset = BlockSize(db_blocks);
-                        srcOffset = BlockSize(k * db_o_blocks * msec_o_blocks);
+                        srcOffset = BlockSize(k * db_o_blocks * m_sec_o_blocks);
 
                         // Nz -> Zz
                         loadDataParams.repeatTimes = db_blocks;
@@ -300,7 +347,7 @@ R"(
                 fixpipeParams.dstNdStride = 0;
 
                 AscendC::Fixpipe(
-                    cGM[offsetC + mi * BlockLen(msec_o_blocks) * n + ni * BlockLen(nsec_o_blocks)],
+                    cGM[offsetC + mi * BlockLen(m_sec_o_blocks) * n + ni * BlockLen(n_sec_o_blocks)],
                     c1Local,
                     fixpipeParams);
             }
@@ -312,3 +359,4 @@ R"(
 )";
 }
 }
+#endif
