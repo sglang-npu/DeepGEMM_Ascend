@@ -23,20 +23,11 @@ public:
 #define DGA_STATIC_ASSERT(cond, ...) static_assert(cond, __VA_ARGS__)
 #endif
 
-// #ifndef DGA_HOST_ASSERT
-// #define DGA_HOST_ASSERT(cond) \
-// do { \
-//     if (not (cond)) { \
-//         throw DGAException("Assertion", __FILE__, __LINE__, #cond); \
-//     } \
-// } while (0)
-// #endif
-
 #ifndef DGA_HOST_ASSERT
 #define DGA_HOST_ASSERT(cond) \
 do { \
     if (not (cond)) { \
-        std::cerr << __FILE__ << ":" << __LINE__ << " dgaError: " << #cond << std::endl; \
+        throw DGAException("Assertion", __FILE__, __LINE__, #cond); \
     } \
 } while (0)
 #endif

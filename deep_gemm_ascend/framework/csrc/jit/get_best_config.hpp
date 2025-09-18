@@ -1,13 +1,17 @@
+#ifndef GET_BEST_CONFIG_HPP
+#define GET_BEST_CONFIG_HPP
+
 #include <iostream>
 #include <cmath>
 #include <cstdint>
 
+namespace deep_gemm_ascend {
 uint32_t align16(uint32_t x) {
     return (x + 15) & ~15;
 }
 
-struct Args {
-    int k_iters;
+struct Config {
+    uint32_t k_iters;
     uint32_t batch;
 
     uint32_t m, n, k;
@@ -27,8 +31,8 @@ struct Args {
     uint32_t r_db_num;
 };
 
-Args get_best_config(uint32_t batch, uint32_t m, uint32_t n, uint32_t k) {
-    Args args;
+Config get_best_config(uint32_t batch, uint32_t m, uint32_t n, uint32_t k) {
+    Config args;
 
     args.m_sections = 1;
     args.n_sections = 1;
@@ -79,3 +83,63 @@ Args get_best_config(uint32_t batch, uint32_t m, uint32_t n, uint32_t k) {
 
     return args;
 }
+
+Config get_bench_config(uint32_t m, uint32_t n, uint32_t k,
+    uint32_t m_sections, uint32_t n_sections,
+    uint32_t m_sec_o_blocks, uint32_t n_sec_o_blocks,
+    uint32_t k_o_iter_blocks, uint32_t db_o_blocks)
+{
+    Config args;
+
+    args.m_sections = m_sections;
+    args.n_sections = n_sections;
+    args.m_blocks = align16(m) / 16;
+    args.n_blocks = align16(n) / 16;
+    args.k_blocks = align16(k) / 16;
+    args.m_o_fix = align16(m) - m;
+    args.n_o_fix = align16(n) - n;
+    args.k_o_fix = align16(k) - k;
+
+    args.m_sec_o_blocks = m_sec_o_blocks;
+    args.n_sec_o_blocks = n_sec_o_blocks;
+    args.k_o_iter_blocks = k_o_iter_blocks;
+    args.db_o_blocks = db_o_blocks;
+    args.db_o_num = args.k_o_iter_blocks / args.db_o_blocks;
+
+    args.r_m_blocks = args.m_blocks % args.m_sec_o_blocks;
+    args.r_n_blocks = args.n_blocks % args.n_sec_o_blocks;
+
+    if (args.r_m_blocks == 0) {
+        args.r_m_blocks = args.m_sec_o_blocks;
+    }
+    if (args.r_n_blocks == 0) {
+        args.r_n_blocks = args.n_sec_o_blocks;
+    }
+
+    args.k_iters = (args.k_blocks + args.k_o_iter_blocks - 1) / args.k_o_iter_blocks;
+    uint32_t k_tail_blocks = args.k_blocks % args.k_o_iter_blocks;
+    args.r_k_blocks = k_tail_blocks % args.db_o_blocks;
+    args.r_db_num = (k_tail_blocks + args.db_o_blocks - 1) / args.db_o_blocks;
+
+    uint32_t m_iters = (args.m_blocks + args.m_sec_o_blocks - 1) / args.m_sec_o_blocks;
+    uint32_t n_iters = (args.n_blocks + args.n_sec_o_blocks - 1) / args.n_sec_o_blocks;
+
+    args.m_parts = (m_iters + args.m_sections - 1) / args.m_sections;
+    args.n_parts = (n_iters + args.n_sections - 1) / args.n_sections;
+
+    args.m_sc_blocks = args.m_parts * args.m_sec_o_blocks;
+    args.n_sc_blocks = args.n_parts * args.n_sec_o_blocks;
+
+    args.r_m_parts = m_iters - ((args.m_sections - 1) * args.m_parts);
+    args.r_n_parts = n_iters - ((args.n_sections - 1) * args.n_parts);
+
+    args.batch = 1;
+    args.m = m;
+    args.n = n;
+    args.k = k;
+
+    return args;
+}
+} // namespace deep_gemm_ascend
+
+#endif
