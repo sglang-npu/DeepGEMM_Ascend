@@ -184,7 +184,7 @@ class GEMMBenchmarkRunner():
         # gen_data -> deepgemm_gemm && cann_gemm -> is_correct -> ms_prof -> save_result
         shape_str = '_'.join(map(str, shape))
         filename = f'shape_{shape_str}.jsonl'
-        result_path = str(Path(result_dir) / filename)
+        result_path = str(Path(self.result_dir) / filename)
 
         A, B = self.gen_data(shape)
         gold = self.cann_gemm(A, B)
@@ -200,9 +200,9 @@ class GEMMBenchmarkRunner():
 
         start_idx = max_saved_idx + 1 if max_saved_idx >= 0 else 0
         results = []
-        total_params = len(self.parameters.grid_parameters[start_idx:])
+        total_params = len(self.parameters.grid_parameters)
         with tqdm(total=total_params, initial=start_idx, desc=f"Testing shape {shape}", postfix={"Proccessed": start_idx, "Valid": saved_count}) as pbar:
-            for idx, parameters in enumerate(self.parameters.grid_parameters):
+            for idx, parameters in enumerate(self.parameters.grid_parameters[start_idx:], start=start_idx):
                 output = self.deepgemm_gemm(A, B, parameters)
                 
                 if self.is_correct(gold, output):
@@ -214,7 +214,6 @@ class GEMMBenchmarkRunner():
                         N=shape[1],
                         K=shape[2],
                         time=time_us,
-                        idx=start_idx + idx,
                         # diff=?
                         parameters=parameters
                     )
