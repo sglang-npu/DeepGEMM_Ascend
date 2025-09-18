@@ -63,14 +63,19 @@ Config get_best_config(uint32_t batch, uint32_t m, uint32_t n, uint32_t k) {
 
     args.k_iters = (args.k_blocks + args.k_o_iter_blocks - 1) / args.k_o_iter_blocks; // k轴上总共可以搬运（迭代iter）多少次
     uint32_t k_tail_blocks = args.k_blocks % args.k_o_iter_blocks; // k_tail_blocks 剩余边角料 的block 还剩多少 < 20
-    args.r_k_blocks = k_tail_blocks % args.db_o_blocks;// 假如 15 % 10 还剩 5，则r_k_blocks = 5
-    args.r_db_num = (k_tail_blocks + args.db_o_blocks - 1) / args.db_o_blocks; // r_db_num 剩余的block 应被搬多少次。假如 k_tail_blocks = 1  搬运1次
+    if (k_tail_blocks == 0) {
+        args.r_db_num = args.db_o_num;
+        args.r_k_blocks = args.db_o_blocks;
+    } else {
+        args.r_db_num = (k_tail_blocks + args.db_o_blocks - 1) / args.db_o_blocks; // r_db_num 剩余的block 应被搬多少次。假如 k_tail_blocks = 1  搬运1次
+        args.r_k_blocks = k_tail_blocks - ((args.r_db_num - 1) * args.db_o_blocks);
+    }
 
     uint32_t m_iters = (args.m_blocks + args.m_sec_o_blocks - 1) / args.m_sec_o_blocks; // m轴上需要循环搬运 m_iters 次, 搬运单位 每次3个block
     uint32_t n_iters = (args.n_blocks + args.n_sec_o_blocks - 1) / args.n_sec_o_blocks; // n轴上需要循环搬运 n_iters 次。
 
-    args.m_parts = (m_iters + args.m_sections - 1) / args.m_sections; // 每个Ai_core 在M轴上分别搬运 m_parts 次。
-    args.n_parts = (n_iters + args.n_sections - 1) / args.n_sections; // 每个Ai_core 在N轴上分别搬运 n_parts 次。
+    args.m_parts = m_iters / args.m_sections; // 每个Ai_core 在M轴上分别搬运 m_parts 次。
+    args.n_parts = n_iters / args.n_sections; // 每个Ai_core 在N轴上分别搬运 n_parts 次。
 
     args.m_sc_blocks = args.m_parts * args.m_sec_o_blocks; // 每个 Ai core 在m轴总计搬运的blocks， m_sec_o_blocks 是跨度
     args.n_sc_blocks = args.n_parts * args.n_sec_o_blocks; // 每个 Ai core 在n轴总计搬运的blocks， n_sec_o_blocks 是跨度
@@ -120,20 +125,19 @@ Config get_bench_config(uint32_t m, uint32_t n, uint32_t k,
 
     args.k_iters = (args.k_blocks + args.k_o_iter_blocks - 1) / args.k_o_iter_blocks;
     uint32_t k_tail_blocks = args.k_blocks % args.k_o_iter_blocks;
-    if (k_tail_blocks ==0) {
+    if (k_tail_blocks == 0) {
         args.r_db_num = args.db_o_num;
         args.r_k_blocks = args.db_o_blocks;
-    }
-    else {
-        args.r_db_num = (k_tail_blocks + args.db_o_blocks - 1) / args.db_o_blocks;
+    } else {
+        args.r_db_num = (k_tail_blocks + args.db_o_blocks - 1) / args.db_o_blocks; // r_db_num 剩余的block 应被搬多少次。假如 k_tail_blocks = 1  搬运1次
         args.r_k_blocks = k_tail_blocks - ((args.r_db_num - 1) * args.db_o_blocks);
     }
 
     uint32_t m_iters = (args.m_blocks + args.m_sec_o_blocks - 1) / args.m_sec_o_blocks;
     uint32_t n_iters = (args.n_blocks + args.n_sec_o_blocks - 1) / args.n_sec_o_blocks;
 
-    args.m_parts = (m_iters + args.m_sections - 1) / args.m_sections;
-    args.n_parts = (n_iters + args.n_sections - 1) / args.n_sections;
+    args.m_parts = m_iters / args.m_sections;
+    args.n_parts = n_iters / args.n_sections;
 
     args.m_sc_blocks = args.m_parts * args.m_sec_o_blocks;
     args.n_sc_blocks = args.n_parts * args.n_sec_o_blocks;
