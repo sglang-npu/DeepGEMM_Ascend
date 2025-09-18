@@ -37,6 +37,7 @@ shape_group = [
     # [2048, 4096, 7168],
     # [4096, 4096, 7168]
 ]
+error_tolerance = 1e-4
 
 class Parameter():
     def __init__(self):
@@ -156,7 +157,6 @@ class Result():
     N: int
     K: int
     time: float
-    idx: int
     diff: float
     parameters: Dict[str, int] = field(default_factory=lambda:{
         'm_sections': 0,
@@ -204,37 +204,35 @@ class GEMMBenchmarkRunner():
                     if result['idx'] > max_saved_idx:
                         max_saved_idx = result['idx']
 
-        start_idx = max_saved_idx + 1 if max_saved_idx >= 0 else 1
+        start_idx = max_saved_idx + 1 if max_saved_idx >= 0 else 0
         results = []
         total_params = len(self.parameters.grid_parameters)
-        with tqdm(total=total_params, initial=start_idx, desc=f"Testing shape {shape}", postfix={"Proccessed": start_idx, "Valid": saved_count}) as pbar:
+        with tqdm(total=total_params, initial=start_idx, desc=f"Testing shape {shape}", postfix={"Processed": start_idx, "Valid": saved_count}) as pbar:
             for idx, parameters in enumerate(self.parameters.grid_parameters[start_idx:], start=start_idx):
                 output = self.deepgemm_gemm(A, B, parameters)
                 is_diff, diff_prop  = self.is_correct(gold, output)
+                #TODO:正确调用self.ms_prof
+                time_us = self.ms_prof() if diff < error_tolerance else 10086
+                result = Result(
+                    idx=idx,
+                    M=shape[0],
+                    N=shape[1],
+                    K=shape[2],
+                    time=time_us,
+                    diff=diff_prop,
+                    parameters=parameters
+                )
+                results.append(result)
+                saved_count += 1
                 
-                if is_diff:
-                    # TODO:
-                    time_us = self.ms_prof()
-                    result = Result(
-                        idx=idx,
-                        M=shape[0],
-                        N=shape[1],
-                        K=shape[2],
-                        time=time_us,
-                        diff= diff_prop,
-                        parameters=parameters
-                    )
-                    results.append(result)
-                    saved_count += 1
-                
-                if len(results) == 100 or idx + 1 == total_params:
+                if len(results) == 100 or idx == total_params:
                     if results:
                         self.save_result(results, result_path)
                         results = []
 
                 pbar.update(1)
                 pbar.set_postfix({
-                    'Processed': idx,
+                    'Processed': idx + 1,
                     'Value': saved_count
                 })
 
