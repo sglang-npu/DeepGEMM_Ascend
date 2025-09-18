@@ -61,7 +61,7 @@ class Parameter():
             for n_sec_o_blocks in range(1, 128 - m_sec_o_blocks):
                 sum_mn = m_sec_o_blocks + n_sec_o_blocks
                 # Rule 2：(m + n) × k < 1024 → k < 1024/(m + n)
-                max_k = 1023 // sum_mn
+                max_k = 1023 // sum_mn // 2
 
                 # Rule 3：m_sec_o_blocks × db_o_blocks <= 128 && n_sec_o_blocks × db_o_blocks <= 128 → db_o_blocks <= min(128/m_sec_o_blocks, 128/m_sec_o_blocks)
                 max_db_from_m = 128 // m_sec_o_blocks
@@ -74,14 +74,14 @@ class Parameter():
     def generate_mnk_db_o_blocks_linear(self):
         m_sec_o_blocks_values = [2, 4, 8, 16, 24, 32, 48, 64, 96, 128]
         n_sec_o_blocks_values = [2, 4, 8, 16, 24, 32, 48, 64, 96, 128]
-        k_o_iter_blocks_values = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+        k_o_iter_blocks_values = [1, 2, 4, 8, 16, 32, 64, 128, 256]
         db_o_blocks_values = [1, 2, 4, 8, 16, 32, 64]
 
         for m_sec_o_blocks in m_sec_o_blocks_values:
             for n_sec_o_blocks in n_sec_o_blocks_values:
                 sum_mn = m_sec_o_blocks + n_sec_o_blocks
                 # Rule 2：(m + n) × k < 1024 → k < 1024/(m + n)
-                max_k = 1023 // sum_mn
+                max_k = 1023 // sum_mn // 2
 
                 for k_o_iter_blocks in k_o_iter_blocks_values:
                     # Rule 3：m_sec_o_blocks × db_o_blocks <= 128 && n_sec_o_blocks × db_o_blocks <= 128 → db_o_blocks <= min(128/m_sec_o_blocks, 128/m_sec_o_blocks)
