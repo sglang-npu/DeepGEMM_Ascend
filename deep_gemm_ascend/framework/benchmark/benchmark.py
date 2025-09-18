@@ -1,8 +1,8 @@
 
 from typing import List, Dict, Any 
 import torch
-import torch_npu
 from torch import Tensor
+import numpy as np 
 from dataclasses import dataclass, asdict, field, is_dataclass
 from pathlib import Path
 from tqdm import tqdm
@@ -150,6 +150,8 @@ class Result():
     N: int
     K: int
     time: float
+    idx: int
+    # diff: float
     parameters: Dict[str, int] = field(default_factory=lambda:{
         'm_sections': 0,
         'n_sections': 0,
@@ -173,42 +175,64 @@ class Result():
 
 
 class GEMMBenchmarkRunner():
-    def __init__(self, shape_group, result_path="./benchmark_output.jsonl"):
+    def __init__(self, shape_group, result_dir="./results"):
         self.shape_group = shape_group
-        self.result_path = result_path
+        self.result_dir = result_dir
         self.parameters = Parameter()
-
-    def benchmark_shape(self, shape: list) -> List[Result]:
+    
+    def benchmark_shape(self, shape: list) -> None:
         # gen_data -> deepgemm_gemm && cann_gemm -> is_correct -> ms_prof -> save_result
+        shape_str = '_'.join(map(str, shape))
+        filename = f'shape_{shape_str}.jsonl'
+        result_path = str(Path(result_dir) / filename)
+
         A, B = self.gen_data(shape)
         gold = self.cann_gemm(A, B)
-        results = []
 
-        total_params = len(self.parameters.grid_parameters)
-        with tqdm(total=total_params, desc=f"Testing shape {shape}") as pbar:
+        saved_count = 0      # 保存的结果数量
+        max_saved_idx = -1   # 已保存的最大索引
+        if os.path.exists(result_path):
+            with jsonlines.open(result_path, mode='r') as reader:
+                for result in reader:
+                    saved_count += 1
+                    if result['idx'] > max_saved_idx:
+                        max_saved_idx = result['idx']
+
+        start_idx = max_saved_idx + 1 if max_saved_idx >= 0 else 0
+        results = []
+        total_params = len(self.parameters.grid_parameters[start_idx:])
+        with tqdm(total=total_params, initial=start_idx, desc=f"Testing shape {shape}", postfix={"Proccessed": start_idx, "Valid": saved_count}) as pbar:
             for idx, parameters in enumerate(self.parameters.grid_parameters):
                 output = self.deepgemm_gemm(A, B, parameters)
                 
                 if self.is_correct(gold, output):
-                    # todo:
-                    # time_us = self.ms_prof()
+                    # TODO:
+                    time_us = self.ms_prof()
                     result = Result(
                         idx=idx,
                         M=shape[0],
                         N=shape[1],
                         K=shape[2],
-                        time=0,
+                        time=time_us,
+                        idx=start_idx + idx,
+                        # diff=?
                         parameters=parameters
                     )
                     results.append(result)
+                    saved_count += 1
+                
+                if len(results) == 100 or idx == total_params - 1:
+                    if results:
+                        self.save_result(results, result_path)
+                        results = []
 
                 pbar.update(1)
                 pbar.set_postfix({
                     'curren': idx + 1,
-                    'valid': len(results)
+                    'valid': saved_count
                 })
 
-        return results
+        return
 
     def gen_data(self, shape: list) -> tuple[Tensor, Tensor]:
         device = torch.device("npu" if torch.npu.is_available() else "cpu")
@@ -250,9 +274,8 @@ class GEMMBenchmarkRunner():
 
     def ms_prof(self, output_path: str, kernel_path: str) -> float:
         pass
-
+    
     def save_result(self, results: list, path: str) -> None:
-        # Path(path).parent.mkdir(parent=True, exist_ok=True)
         result_dicts = []
         for result in results:
             if is_dataclass(result):
@@ -274,8 +297,8 @@ class GEMMBenchmarkRunner():
         print("=====STARTING GEMM BENCHMARK=====")
 
         for shape in self.shape_group:
-            results = self.benchmark_shape(shape)
-            self.save_result(results, self.result_path)
+            self.benchmark_shape(shape)
+            
     
     def visualize_time_with_single_parameter(self, shape: list, target_parameter: str, other_parameters: dict) -> None:
         if not os.path.exists(self.result_path):
