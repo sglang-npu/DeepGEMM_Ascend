@@ -2,4 +2,5 @@
 .vscode/
 deep_gemm_ascend/doc/personal.md
 .idea
-deep_gemm_ascend/cache
+deep_gemm_ascend/cache/kernel*
+deep_gemm_ascend/cache/out

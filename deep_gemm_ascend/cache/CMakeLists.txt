@@ -31,3 +31,7 @@ set(KERNEL_SRC_PATH
 
 # generate mmad_custom.o
 ascendc_fatbin_library(mmad_kernels ${KERNEL_SRC_PATH})
+
+ascendc_compile_options(mmad_kernels PRIVATE
+  -g -O0
+)
