@@ -8,6 +8,7 @@ from pathlib import Path
 from tqdm import tqdm
 import os
 import json
+import jsonlines
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -192,8 +193,8 @@ class GEMMBenchmarkRunner():
         filename = f'shape_{shape_str}.jsonl'
         result_path = str(Path(self.result_dir) / filename)
 
-        A, B = self.gen_data(shape)
-        gold = self.cann_gemm(A, B)
+        a_npu, b_npu, x_npu, y_npu = self.gen_data(shape)
+        gold = self.cann_gemm(x_npu, y_npu)
 
         saved_count = 0      # 保存的结果数量
         max_saved_idx = -1   # 已保存的最大索引
@@ -209,10 +210,10 @@ class GEMMBenchmarkRunner():
         total_params = len(self.parameters.grid_parameters)
         with tqdm(total=total_params, initial=start_idx, desc=f"Testing shape {shape}", postfix={"Processed": start_idx, "Valid": saved_count}) as pbar:
             for idx, parameters in enumerate(self.parameters.grid_parameters[start_idx:], start=start_idx):
-                output = self.deepgemm_gemm(A, B, parameters)
-                is_diff, diff_prop  = self.is_correct(gold, output)
+                output = self.deepgemm_gemm(a_npu, b_npu, parameters)
+                is_diff, diff_prop = self.is_correct(gold, output)
                 #TODO:正确调用self.ms_prof
-                time_us = self.ms_prof() if diff < error_tolerance else 10086
+                time_us = self.ms_prof() if diff_prop < error_tolerance else 10086
                 result = Result(
                     idx=idx,
                     M=shape[0],
@@ -238,7 +239,7 @@ class GEMMBenchmarkRunner():
 
         return
 
-    def gen_data(self, shape: list) -> tuple[Tensor, Tensor]:
+    def gen_data(self, shape: list) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         device = torch.device("npu" if torch.npu.is_available() else "cpu")
         if device.type == "cpu":
             assert False
@@ -254,17 +255,19 @@ class GEMMBenchmarkRunner():
         A = heavy_tail([M, K])
         B = heavy_tail([K, N])
 
-        A_npu = torch.tensor(A, device=device)
-        B_npu = torch.tensor(B, device=device)
-        return (A_npu, B_npu)
+        a_npu = torch.tensor(A, device=device, dtype=torch.float16)
+        b_npu = torch.tensor(B, device=device, dtype=torch.float16)
+        x_npu = torch.tensor(A, device=device, dtype=torch.float32)
+        y_npu = torch.tensor(B, device=device, dtype=torch.float32)
+        return a_npu, b_npu, x_npu, y_npu
 
-    def deepgemm_gemm(self, A: Tensor, B: Tensor, parameters: dict) -> Tensor:
+    def deepgemm_gemm(self, a_npu: Tensor, b_npu: Tensor, parameters: dict) -> Tensor:
         param_list = list(parameters.values())
         param_list.extend([0] * 22)
         param_npu = torch.tensor(param_list, device='npu', dtype=torch.int32)
-        
-        z_shape = [A.size(0), B.size(1)]
-        z_npu = torch.zeros(z_shape, device='npu', dtype=torch.int32)
+
+        z_shape = [a_npu.size(0), b_npu.size(1)]
+        z_npu = torch.zeros(z_shape, device='npu', dtype=torch.float32)
 
         deep_gemm_ascend.run_mmad_bench(A, B, z_npu, param_npu)
         return z_npu
@@ -273,9 +276,9 @@ class GEMMBenchmarkRunner():
         out = torch.matmul(A, B)
         return out
 
-    def is_correct(self, cann_result: Tensor, deepgemm_result: Tensor) -> bool, float:
-        output = cann_result.cpu().numpy()
-        golden = deepgemm_result.cpu().numpy()
+    def is_correct(self, cann_result: Tensor, deepgemm_result: Tensor) -> (bool, float):
+        output = deepgemm_result.cpu().numpy()
+        golden = cann_result.cpu().numpy().astype(np.float32)
 
         output = output.reshape(-1)
         golden = golden.reshape(-1)
@@ -286,24 +289,13 @@ class GEMMBenchmarkRunner():
                                      atol=absolute_tol,
                                      equal_nan=True)
         diff_ele_idxs = np.where(diff_ele_result == False)[0]
-        for idx in range(len(diff_ele_idxs)):
-            real_idx = diff_ele_idxs[idx]
-            golden_data = golden[real_idx]
-            output_data = output[real_idx]
-            print(
-                "data index: %06d, excepted: %-.9f， actual: %-.9f，rdiff: %-.6f" % (real_idx, golden_data, output_data,
-                                                                                   abs(output_data - golden_data) / golden_data)
-            )
-
-            if idx == 10:
-                break
 
         error_ratio = float(diff_ele_idxs.size) / golden.size
-        print("error ratio: %.4f， tolerance： %.4f" % (error_ratio, error_tol))
         return error_ratio <= error_tol, error_ratio
 
-    def ms_prof(self, output_path: str, kernel_path: str) -> float:
-        pass
+    # def ms_prof(self, output_path: str, kernel_path: str) -> float:
+    def ms_prof(self) -> float:
+        return 0
     
     def save_result(self, results: list, path: str) -> None:
         result_dicts = []
