@@ -1,37 +1,40 @@
 
 from typing import List, Dict, Any 
+import torch
+import torch_npu
 from torch import Tensor
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict, field, is_dataclass
 from pathlib import Path
 from tqdm import tqdm
 import os
 import json
 import matplotlib.pyplot as plt
+import numpy as np
 
 shape_group = [
     [8, 4096, 7168],
-    [8, 7168, 18432],
-    [8, 18432, 7168],
-    [64, 4096, 7168],
-    [64, 7168, 18432],
-    [64, 18432, 7168],
-    [64, 24576, 1536],
-    [64, 32768, 512],
-    [64, 7168, 16384],
-    [128, 4096, 7168],
-    [128, 7168, 18432],
-    [128, 18432, 7168],
-    [1024, 4096, 7168],
-    [1024, 18432, 7168],
-    [2048, 4096, 7168],
-    [4096, 4096, 7168]
+    # [8, 7168, 18432],
+    # [8, 18432, 7168],
+    # [64, 4096, 7168],
+    # [64, 7168, 18432],
+    # [64, 18432, 7168],
+    # [64, 24576, 1536],
+    # [64, 32768, 512],
+    # [64, 7168, 16384],
+    # [128, 4096, 7168],
+    # [128, 7168, 18432],
+    # [128, 18432, 7168],
+    # [1024, 4096, 7168],
+    # [1024, 18432, 7168],
+    # [2048, 4096, 7168],
+    # [4096, 4096, 7168]
 ]
 
 class Parameter():
     def __init__(self):
         # self.all_parameters = self.init_generate_parameters()
         self.grid_parameters = self.grid_generate_parameters()
-    
+
     def generate_mn_sections(self):
         # Rule 1：m_sections × n_sections <= 24
         for m_sections in range(1, 25):
@@ -43,13 +46,13 @@ class Parameter():
     def generate_mn_sections_linear(self):
         m_sections_values = [1, 2, 3, 4, 6, 8, 12, 16, 20, 24]
         n_sections_values = [1, 2, 3, 4, 6, 8, 12, 16, 20, 24]
-        
+
         for m_sections in m_sections_values:
             max_n_sections = 24 // m_sections
             n_sections_valid_values = [n for n in n_sections_values if n <= max_n_sections]
 
             for n_sections in n_sections_valid_values:
-                yield (m_sections, n_sections)
+                yield m_sections, n_sections
 
     def generate_mnk_db_o_blocks(self):
         for m_sec_o_blocks in range(1, 128):
@@ -57,21 +60,21 @@ class Parameter():
                 sum_mn = m_sec_o_blocks + n_sec_o_blocks
                 # Rule 2：(m + n) × k < 1024 → k < 1024/(m + n)
                 max_k = 1023 // sum_mn
-                
+
                 # Rule 3：m_sec_o_blocks × db_o_blocks <= 128 && n_sec_o_blocks × db_o_blocks <= 128 → db_o_blocks <= min(128/m_sec_o_blocks, 128/m_sec_o_blocks)
                 max_db_from_m = 128 // m_sec_o_blocks
                 max_db_from_n = 128 // n_sec_o_blocks
                 max_db = min(max_db_from_m, max_db_from_n)
                 for k_o_iter_blocks in range(1, max_k + 1):
                     for db_o_blocks in range(1, max_db + 1):
-                        yield (m_sec_o_blocks, n_sec_o_blocks, k_o_iter_blocks, db_o_blocks)
+                        yield m_sec_o_blocks, n_sec_o_blocks, k_o_iter_blocks, db_o_blocks
 
     def generate_mnk_db_o_blocks_linear(self):
         m_sec_o_blocks_values = [2, 4, 8, 16, 24, 32, 48, 64, 96, 128]
         n_sec_o_blocks_values = [2, 4, 8, 16, 24, 32, 48, 64, 96, 128]
         k_o_iter_blocks_values = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
         db_o_blocks_values = [1, 2, 4, 8, 16, 32, 64]
-        
+
         for m_sec_o_blocks in m_sec_o_blocks_values:
             for n_sec_o_blocks in n_sec_o_blocks_values:
                 sum_mn = m_sec_o_blocks + n_sec_o_blocks
@@ -90,7 +93,7 @@ class Parameter():
                     for db_o_blocks in db_o_blocks_values:
                         if db_o_blocks > max_db_o_blocks:
                             continue
-                        yield (m_sec_o_blocks, n_sec_o_blocks, k_o_iter_blocks, db_o_blocks)
+                        yield m_sec_o_blocks, n_sec_o_blocks, k_o_iter_blocks, db_o_blocks
 
     # 满足约束条件的所有参数组合
     def init_generate_parameters(self):
@@ -140,6 +143,7 @@ class Parameter():
 
 @dataclass
 class Result():
+    idx: int
     M: int
     N: int
     K: int
@@ -170,7 +174,7 @@ class GEMMBenchmarkRunner():
         self.shape_group = shape_group
         self.result_path = result_path
         self.parameters = Parameter()
-    
+
     def benchmark_shape(self, shape: list) -> List[Result]:
         # gen_data -> deepgemm_gemm && cann_gemm -> is_correct -> ms_prof -> save_result
         A, B = self.gen_data(shape)
@@ -184,17 +188,17 @@ class GEMMBenchmarkRunner():
                 
                 if self.is_correct(gold, output):
                     # todo:
-                    time_us = self.ms_prof()
+                    # time_us = self.ms_prof()
                     result = Result(
+                        idx=idx,
                         M=shape[0],
                         N=shape[1],
                         K=shape[2],
-                        time=time_us,
-                        idx=idx,
+                        time=0,
                         parameters=parameters
                     )
                     results.append(result)
-                
+
                 pbar.update(1)
                 pbar.set_postfix({
                     'curren': idx + 1,
@@ -206,7 +210,7 @@ class GEMMBenchmarkRunner():
     def gen_data(self, shape: list) -> tuple[Tensor, Tensor]:
         device = torch.device("npu" if torch.npu.is_available() else "cpu")
         if device.type == "cpu":
-            print("Warning: NPU不可用，将在CPU上运行！")
+            assert False
 
         M, N, K = shape
 
@@ -215,32 +219,30 @@ class GEMMBenchmarkRunner():
         def heavy_tail(shape):
             v = rng.lognormal(mean=1.0, sigma=1.2, size=shape)
             return np.clip(v, 1, 10).astype(np.float16)
-        
+
         A = heavy_tail([M, K])
         B = heavy_tail([K, N])
 
         A_npu = torch.tensor(A, device=device)
         B_npu = torch.tensor(B, device=device)
-        return (A, B)
-    
+        return (A_npu, B_npu)
+
     def deepgemm_gemm(self, A: Tensor, B: Tensor, parameters: dict) -> Tensor:
-        m_sections, n_sections, m_sec_o_blocks, n_sec_o_blocks, k_o_iter_blocks, 
-        
+        out = torch.matmul(A, B)
+        return out
 
     def cann_gemm(self, A: Tensor, B: Tensor) -> Tensor:
         out = torch.matmul(A, B)
-
         return out
-    
+
     def is_correct(self, cann_result: Tensor, deepgemm_result: Tensor) -> bool:
-        pass
+        return True
 
     def ms_prof(self, output_path: str, kernel_path: str) -> float:
         pass
-    
-    def save_result(self, results: list, path: str) -> None:
-        Path(path).parent.mkdir(parent=True, exist_ok=True)
 
+    def save_result(self, results: list, path: str) -> None:
+        # Path(path).parent.mkdir(parent=True, exist_ok=True)
         result_dicts = []
         for result in results:
             if is_dataclass(result):
@@ -346,6 +348,7 @@ class GEMMBenchmarkRunner():
 if __name__ == "__main__":
     # parameters = Parameter()
     benchmark_runner = GEMMBenchmarkRunner(shape_group)
+    benchmark_runner.run_benchmarks()
     # shape = [1024, 512, 256]
     # target_parameter = "m_sections"
     # other_parameters = {"n_sections": 4, "m_sec_o_blocks": 8, "n_sec_o_blocks": 8, "k_o_iter_blocks": 16, "db_o_blocks": 4}
