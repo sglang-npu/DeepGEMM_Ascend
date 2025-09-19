@@ -11,9 +11,9 @@ import json
 import jsonlines
 import matplotlib.pyplot as plt
 import numpy as np
-
+import pandas as pd
 import deep_gemm_ascend
-
+import subprocess
 
 torch.npu.config.allow_internal_format = False
 relative_tol = 1e-6
@@ -80,8 +80,8 @@ class Parameter():
                         yield m_sec_o_blocks, n_sec_o_blocks, k_o_iter_blocks, db_o_blocks
 
     def generate_mnk_db_o_blocks_linear(self):
-        m_sec_o_blocks_values = [2, 4, 8, 16, 24, 32, 48, 64, 96, 128]
-        n_sec_o_blocks_values = [2, 4, 8, 16, 24, 32, 48, 64, 96, 128]
+        m_sec_o_blocks_values = [1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128]
+        n_sec_o_blocks_values = [1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128]
         k_o_iter_blocks_values = [1, 2, 4, 8, 16, 32, 64, 128, 256]
         db_o_blocks_values = [1, 2, 4, 8, 16, 32, 64]
 
@@ -180,12 +180,14 @@ class Result():
             parameters=data.get('parameters', {})
         )
 
-
 class GEMMBenchmarkRunner():
-    def __init__(self, shape_group, result_dir="./results"):
+    def __init__(self, shape_group, result_dir="./results", msp_dir="./msp", msp_bench_path='deep_gemm_ascend\\framework\\tests\\bench_main.py'):
         self.shape_group = shape_group
         self.result_dir = result_dir
         self.parameters = Parameter()
+        self.parameter_cache = []
+        self.msp_dir = msp_dir
+        self.msp_bench_path = msp_bench_path
     
     def benchmark_shape(self, shape: list) -> None:
         # gen_data -> deepgemm_gemm && cann_gemm -> is_correct -> ms_prof -> save_result
@@ -212,8 +214,7 @@ class GEMMBenchmarkRunner():
             for idx, parameters in enumerate(self.parameters.grid_parameters[start_idx:], start=start_idx):
                 output = self.deepgemm_gemm(a_npu, b_npu, parameters)
                 is_diff, diff_prop = self.is_correct(gold, output)
-                #TODO:正确调用self.ms_prof
-                time_us = self.ms_prof() if diff_prop < error_tolerance else 10086
+                time_us = self.ms_prof() if diff_prop < error_tolerance else float('inf')
                 result = Result(
                     idx=idx,
                     M=shape[0],
@@ -246,19 +247,28 @@ class GEMMBenchmarkRunner():
 
         M, N, K = shape
 
-        rng = np.random.default_rng()
+        # rng = np.random.default_rng()
 
-        def heavy_tail(shape):
-            v = rng.lognormal(mean=1.0, sigma=1.2, size=shape)
-            return np.clip(v, 1, 10).astype(np.float16)
+        # def heavy_tail(shape):
+        #     v = rng.lognormal(mean=0, sigma=1, size=shape)
+        #     return np.clip(v, -1, 1).astype(np.float16)
 
-        A = heavy_tail([M, K])
-        B = heavy_tail([K, N])
+        # A = heavy_tail([M, K])
+        # B = heavy_tail([K, N])
 
-        a_npu = torch.tensor(A, device=device, dtype=torch.float16)
-        b_npu = torch.tensor(B, device=device, dtype=torch.float16)
-        x_npu = torch.tensor(A, device=device, dtype=torch.float32)
-        y_npu = torch.tensor(B, device=device, dtype=torch.float32)
+        # a_npu = torch.tensor(A, device=device, dtype=torch.float16)
+        # b_npu = torch.tensor(B, device=device, dtype=torch.float16)
+        # x_npu = torch.tensor(A, device=device, dtype=torch.float32)
+        # y_npu = torch.tensor(B, device=device, dtype=torch.float32)
+
+        A = torch.rand((M, K), device=device, dtype=torch.float16)
+        B = torch.rand((K, N), device=device, dtype=torch.float16)
+
+        a_npu = A
+        b_npu = B
+        x_npu = A.cpu().to(torch.float32).to(device)
+        y_npu = B.cpu().to(torch.float32).to(device)
+
         return a_npu, b_npu, x_npu, y_npu
 
     def deepgemm_gemm(self, a_npu: Tensor, b_npu: Tensor, parameters: dict) -> Tensor:
@@ -267,13 +277,15 @@ class GEMMBenchmarkRunner():
         param_npu = torch.tensor(param_list, device='npu', dtype=torch.int32)
 
         z_shape = [a_npu.size(0), b_npu.size(1)]
-        z_npu = torch.zeros(z_shape, device='npu', dtype=torch.float32)
+        z_npu = torch.empty(z_shape, device='npu', dtype=torch.float32)
 
-        deep_gemm_ascend.run_mmad_bench(A, B, z_npu, param_npu)
+        deep_gemm_ascend.run_mmad_bench(a_npu, b_npu, z_npu, param_npu)
+        has_negative = torch.any(z_npu < 0).item()
+        self.save_params_to_excel(param_npu, has_negative)
         return z_npu
 
     def cann_gemm(self, A: Tensor, B: Tensor) -> Tensor:
-        out = torch.matmul(A, B)
+        out = A.to('cpu') @ B.to('cpu')
         return out
 
     def is_correct(self, cann_result: Tensor, deepgemm_result: Tensor) -> (bool, float):
@@ -293,9 +305,25 @@ class GEMMBenchmarkRunner():
         error_ratio = float(diff_ele_idxs.size) / golden.size
         return error_ratio <= error_tol, error_ratio
 
-    # def ms_prof(self, output_path: str, kernel_path: str) -> float:
     def ms_prof(self) -> float:
-        return 0
+        cmd_str = f"msprof op --output={self.msp_dir} --aic-metrics='PipeUtilization' --kernel-name='mmad' --application='python3 {self.msp_bench_path}'"
+        result = subprocess.run()
+
+        # 从ms_prof目录下解析最新的耗时
+        all_items = os.listdir(self.msp_dir)
+        subdirs = [item for item in all_items if os.path.isdir(os.path.join(directory_path, item))]
+        subdirs.sort()
+        last_subdir_name = subdirs[-1]
+        last_subdir_path = os.path.join(self.msp_dir, last_subdir_name)
+        PipeUtilization_path = os.path.join(last_subdir_path, "PipeUtilization.csv")
+            
+        def parse_time(csv_path: str):
+            data = pd.read_csv(csv_path, usecols=['aic_time(us)'])
+            return data.iloc[0, 0]
+        
+        time_us = float(parse_time(PipeUtilization_path))
+        return time_us
+        
     
     def save_result(self, results: list, path: str) -> None:
         result_dicts = []
@@ -315,6 +343,54 @@ class GEMMBenchmarkRunner():
         except Exception as e:
             print(f"process data error: {e}")
     
+    def save_params_to_excel(self, params: list, is_negative: bool, excel_file_path="./params.xlsx") -> None:
+        param_names = {
+            0: "m_sections",
+            1: "n_sections",
+            2: "m_sec_o_blocks",
+            3: "n_sec_o_blocks",
+            4: "k_o_iter_blocks",
+            5: "db_o_blocks",
+            6: "m",
+            7: "n",
+            8: "k",
+            9: "batch",
+            10: "k_iters",
+            11: "m_blocks",
+            12: "n_blocks",
+            13: "k_blocks",
+            14: "m_sc_blocks",
+            15: "n_sc_blocks",
+            16: "m_o_fix",
+            17: "n_o_fix",
+            18: "k_o_fix",
+            19: "db_o_num",
+            20: "m_parts",
+            21: "n_parts",
+            22: "r_m_parts",
+            23: "r_n_parts",
+            24: "r_m_blocks",
+            25: "r_n_blocks",
+            26: "r_k_blocks",
+            27: "r_db_num"
+        }
+        data_dict = {}
+        for i, param in enumerate(params):
+            param_name = param_names.get(i, f"{i}")
+            data_dict[param_name] = param.item()
+        data_dict["negative"] = is_negative
+
+        self.parameter_cache.append(data_dict)
+
+        if len(self.parameter_cache) >= 100:
+            df = pd.DataFrame(self.parameter_cache)
+            if not os.path.exists(excel_file_path):
+                df.to_excel(excel_file_path, index=False)
+            else:
+                with pd.ExcelWriter(excel_file_path, mode='a', if_sheet_exists='overlay') as writer:
+                    df.to_excel(writer, index=False, header=False, startrow=writer.sheets['Sheet1'].max_row)
+            self.parameter_cache = []
+
     def run_benchmarks(self) -> None:
         print("=====STARTING GEMM BENCHMARK=====")
 
