@@ -181,7 +181,7 @@ class Result():
         )
 
 class GEMMBenchmarkRunner():
-    def __init__(self, shape_group, result_dir="./results", msp_dir="./msp", msp_bench_path='deep_gemm_ascend\\framework\\tests\\bench_main.py'):
+    def __init__(self, shape_group, result_dir="./results", msp_dir="./msp", msp_bench_path='../tests/bench_main.py'):
         self.shape_group = shape_group
         self.result_dir = result_dir
         self.parameters = Parameter()
@@ -306,7 +306,9 @@ class GEMMBenchmarkRunner():
         return error_ratio <= error_tol, error_ratio
 
     def ms_prof(self) -> float:
-        cmd_str = f"msprof op --output={self.msp_dir} --aic-metrics='PipeUtilization' --kernel-name='mmad' --application='python3 {self.msp_bench_path}'"
+        application_cmd = f"python3 {self.msp_bench_path} --m 96 --n 1536 --k 5952 \
+        --m_sections 1 --n_sections 1 --m_sec_o_blocks 3 --n_sec_o_blocks 8 --k_o_iter_blocks 20 --db_o_blocks 10"
+        cmd_str = f"msprof op --output={self.msp_dir} --aic-metrics='PipeUtilization' --kernel-name='mmad' --application='{application_cmd}'"
         result = subprocess.run()
 
         # 从ms_prof目录下解析最新的耗时

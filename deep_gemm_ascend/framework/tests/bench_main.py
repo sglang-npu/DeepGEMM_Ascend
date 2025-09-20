@@ -10,8 +10,7 @@
 import torch
 import numpy as np 
 import torch_npu
-from torch_npu.testing.testcase import TestCase, run_tests
-import sys, os, math
+import sys, os, math, argparse
 import acl
 import deep_gemm_ascend
 
@@ -33,6 +32,7 @@ def gen_golden_data(m, n, k):
     golden = (np.matmul(x1_gm.astype(np.float32), x2_gm.astype(np.float32))).astype(np.float32)
     return x1_gm, x2_gm, golden 
 
+
 def verify_result(output, golden):
     output = output.reshape(-1)
     golden = golden.reshape(-1)
@@ -43,20 +43,8 @@ def verify_result(output, golden):
                                  atol=absolute_tol,
                                  equal_nan=True)
     diff_ele_idxs = np.where(diff_ele_result == False)[0]
-    for idx in range(len(diff_ele_idxs)):
-        real_idx = diff_ele_idxs[idx]
-        golden_data = golden[real_idx]
-        output_data = output[real_idx]
-        print(
-            "data index: %06d, excepted: %-.9f， actual: %-.9f，rdiff: %-.6f" % (real_idx, golden_data, output_data, 
-            abs(output_data - golden_data) / golden_data)
-        )
-
-        if idx == 10:
-            break
     
     error_ratio = float(diff_ele_idxs.size) / golden.size 
-    print("error ratio: %.4f， tolerance： %.4f" % (error_ratio, error_tol))
     return error_ratio <= error_tol
 
 
@@ -116,34 +104,58 @@ def get_best_config(m, n, k, m_sections, n_sections, m_sec_o_blocks, n_sec_o_blo
     print(f"{param_dic=}")
 
 
-class BenchDeepGemmAscend(TestCase):
-    def test_bench_dga(self):
-        print("============bench deepgemm for ascend==============")
-        x1_gm, x2_gm, golden = gen_golden_data(8, 4096, 7168)
-        x_npu = torch.tensor(x1_gm, device='npu')
-        y_npu = torch.tensor(x2_gm, device='npu')
+def try_parse_args():
+    parser = argparse.ArgumentParser(
+        usage='%(prog)s --m [num] --n [num] --k [num] \
+            --m_sections [num] --n_sections [num] --m_sec_o_blocks [num] \
+            --n_sec_o_blocks [num] --k_o_iter_blocks [num] --db_o_blocks [num]'
+    )
+    parser.add_argument('--m', required=True, type=int)
+    parser.add_argument("--n", required=True, type=int)
+    parser.add_argument("--k", required=True, type=int)
+    parser.add_argument("--m_sections", required=True, type=int)
+    parser.add_argument("--n_sections", required=True, type=int)
+    parser.add_argument("--m_sec_o_blocks", required=True, type=int)
+    parser.add_argument("--n_sec_o_blocks", required=True, type=int)
+    parser.add_argument("--k_o_iter_blocks", required=True, type=int)
+    parser.add_argument("--db_o_blocks", required=True, type=int)
 
-        # 28 params
-        get_best_config(8, 4096, 7168, 1, 4, 2, 128, 1, 1)
-        params_list = [1, 4, 2, 128, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        params_npu = torch.tensor(params_list, device='npu', dtype=torch.int32)
+    if len(sys.argv) == 1:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
+    return parser.parse_args()
 
-        length_z = [x_npu.size(0), y_npu.size(1)]
- 
-        z_npu = torch.zeros(length_z, device='npu', dtype=torch.float32)
-        # default: m_sections=1, n_sections=1, m_sec_o_blocks=3, n_sec_o_blocks=8, k_o_iter_blocks=20, db_o_blocks=10
-        # try:
-        #     deep_gemm_ascend.run_mmad_bench(x_npu, y_npu, z_npu, params_npu)
-        # except Exception as e:
-        #     print(f"run error {e}")
-        verify_result(z_npu.cpu().numpy(), golden)
+
+def test_bench_dga(args):
+    x1_gm, x2_gm, golden = gen_golden_data(args.m, args.n, args.k)
+    x_npu = torch.tensor(x1_gm, device='npu')
+    y_npu = torch.tensor(x2_gm, device='npu')
+
+    # 28 params
+    params_list = [
+        args.m_sections,
+        args.n_sections,
+        args.m_sec_o_blocks,
+        args.n_sec_o_blocks,
+        args.k_o_iter_blocks,
+        args.db_o_blocks,
+    ]
+    params_list.extend([0] * 22)
+    params_npu = torch.tensor(params_list, device='npu', dtype=torch.int32)
+
+    length_z = [x_npu.size(0), y_npu.size(1)]
+
+    z_npu = torch.zeros(length_z, device='npu', dtype=torch.float32)
+    deep_gemm_ascend.run_mmad_bench(x_npu, y_npu, z_npu, params_npu)
+    verify_result(z_npu.cpu().numpy(), golden)
 
 
 if __name__ == "__main__":
-    acl.init()
-    acl.rt.set_device(0)
-    device, _ = acl.rt.get_device()
-    print(f"now use {device=}")
-    run_tests()
-    acl.rt.reset_device(0)
-    acl.finalize()
+    """
+        python3 bench_main.py --m 96 --n 1536 --k 5952 \
+        --m_sections 1 --n_sections 1 \
+        --m_sec_o_blocks 3 --n_sec_o_blocks 8 \
+        --k_o_iter_blocks 20 --db_o_blocks 10
+    """
+    args = try_parse_args()
+    test_bench_dga(args)
