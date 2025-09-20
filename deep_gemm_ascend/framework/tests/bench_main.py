@@ -124,18 +124,20 @@ class BenchDeepGemmAscend(TestCase):
         y_npu = torch.tensor(x2_gm, device='npu')
 
         # 28 params
-        get_best_config(8, 4096, 7168, 1, 4, 2, 128, 1, 1)
-        params_list = [1, 4, 2, 128, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        get_best_config(8, 4096, 7168, 1, 1, 96, 24, 1, 1,)
+        # params_list = [1, 4, 2, 128, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        params_list = [1, 1, 96, 24, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
         params_npu = torch.tensor(params_list, device='npu', dtype=torch.int32)
 
         length_z = [x_npu.size(0), y_npu.size(1)]
  
         z_npu = torch.zeros(length_z, device='npu', dtype=torch.float32)
         # default: m_sections=1, n_sections=1, m_sec_o_blocks=3, n_sec_o_blocks=8, k_o_iter_blocks=20, db_o_blocks=10
-        # try:
-        #     deep_gemm_ascend.run_mmad_bench(x_npu, y_npu, z_npu, params_npu)
-        # except Exception as e:
-        #     print(f"run error {e}")
+        try:
+            deep_gemm_ascend.run_mmad_bench(x_npu, y_npu, z_npu, params_npu)
+        except Exception as e:
+            print(f"run error {e}")
         verify_result(z_npu.cpu().numpy(), golden)
 
 

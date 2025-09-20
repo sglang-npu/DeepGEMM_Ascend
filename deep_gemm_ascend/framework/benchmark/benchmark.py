@@ -21,6 +21,7 @@ absolute_tol = 1e-9
 error_tol = 1e-4
 
 shape_group = [
+    # M、N、K
     [8, 4096, 7168],
     # [8, 7168, 18432],
     # [8, 18432, 7168],
@@ -260,9 +261,12 @@ class GEMMBenchmarkRunner():
         # b_npu = torch.tensor(B, device=device, dtype=torch.float16)
         # x_npu = torch.tensor(A, device=device, dtype=torch.float32)
         # y_npu = torch.tensor(B, device=device, dtype=torch.float32)
+        # 定义目标范围 [a, b)
+        a = 1.0  # 最小值
+        b = 10.0  # 最大值
 
-        A = torch.rand((M, K), device=device, dtype=torch.float16)
-        B = torch.rand((K, N), device=device, dtype=torch.float16)
+        A = a + (b - a) * torch.rand((M, K), device=device, dtype=torch.float16)
+        B = a + (b - a) * torch.rand((K, N), device=device, dtype=torch.float16)
 
         a_npu = A
         b_npu = B
