@@ -4,3 +4,5 @@ deep_gemm_ascend/doc/personal.md
 .idea
 deep_gemm_ascend/cache/kernel*
 deep_gemm_ascend/cache/out
+deep_gemm_ascend/framework/build/
+deep_gemm_ascend/third-party/
