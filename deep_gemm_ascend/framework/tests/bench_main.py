@@ -7,6 +7,18 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # ===============================================================================
+
+"""
+用法：
+    python3 bench_main.py \
+        --m 96 --n 1536 --k 5952  --m_sections 1 --n_sections 1  --m_sec_o_blocks 3 --n_sec_o_blocks 8 --k_o_iter_blocks 20 --db_o_blocks 10
+调试：
+    export LAUNCH_KERNEL_PATH=$DGA_ROOT_DIR/deep_gemm_ascend/cache/kernel_m1n1k1_type1/mmad_kernels.o
+    msdebug python3
+    (msdebug) setting set -- target.run-args "bench_main.py" "--m" 8 "--n" 1536 "--k" 5952 "--m_sections" 1 "--n_sections" 1 "--m_sec_o_blocks" 3 "--n_sec_o_blocks" 8 "--k_o_iter_blocks" 20 "--db_o_blocks" 10
+依赖：
+    cann ≥ 8.3.RC1
+"""
 import torch
 import numpy as np 
 import torch_npu
@@ -150,11 +162,5 @@ def test_bench_dga(args):
 
 
 if __name__ == "__main__":
-    """
-        python3 bench_main.py --m 96 --n 1536 --k 5952 \
-        --m_sections 1 --n_sections 1 \
-        --m_sec_o_blocks 3 --n_sec_o_blocks 8 \
-        --k_o_iter_blocks 20 --db_o_blocks 10
-    """
     args = try_parse_args()
     test_bench_dga(args)
