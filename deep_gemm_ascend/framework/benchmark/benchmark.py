@@ -248,19 +248,6 @@ class GEMMBenchmarkRunner():
 
         M, N, K = shape
 
-        # rng = np.random.default_rng()
-
-        # def heavy_tail(shape):
-        #     v = rng.lognormal(mean=0, sigma=1, size=shape)
-        #     return np.clip(v, -1, 1).astype(np.float16)
-
-        # A = heavy_tail([M, K])
-        # B = heavy_tail([K, N])
-
-        # a_npu = torch.tensor(A, device=device, dtype=torch.float16)
-        # b_npu = torch.tensor(B, device=device, dtype=torch.float16)
-        # x_npu = torch.tensor(A, device=device, dtype=torch.float32)
-        # y_npu = torch.tensor(B, device=device, dtype=torch.float32)
         # 定义目标范围 [a, b)
         a = 1.0  # 最小值
         b = 10.0  # 最大值

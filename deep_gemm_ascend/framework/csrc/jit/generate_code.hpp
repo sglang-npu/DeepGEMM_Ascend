@@ -276,7 +276,7 @@ R"(
                         b2Local = inQueueB2.AllocTensor<half>();
 
                         dstOffset = BlockSize(db_blocks);
-                        srcOffset = BlockSize(k * db_o_blocks * m_sec_o_blocks);
+                        srcOffset = BlockSize(k * db_o_blocks * (mi == (m_parts - 1) ? msec_blocks : m_sec_o_blocks));
 
                         // Nz -> Zz
                         loadDataParams.repeatTimes = db_blocks;

@@ -1,0 +1,4 @@
+python bench_main.py
+    
+1、算子执行异常
+--m 4000 --n 4000 --k 4000 --m_sections 1 --n_sections 1 --m_sec_o_blocks 2 --n_sec_o_blocks 96 --k_o_iter_blocks 1 --db_o_blocks 1

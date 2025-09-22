@@ -20,17 +20,18 @@ absolute_tol = 1e-9
 error_tol = 1e-4
 
 def gen_golden_data(m, n, k):
-    rng = np.random.default_rng()
+    # 定义目标范围 [a, b)
+    min_num = 1.0  # 最小值
+    max_num = 10.0  # 最大值
 
-    def heavy_tail(shape):
-        v = rng.lognormal(mean=1.0, sigma=1.2, size=shape)
-        return np.clip(v, 1, 10).astype(np.float16)
-    
-    x1_gm = heavy_tail([m, k])
-    x2_gm = heavy_tail([k, n])
+    a_npu = min_num + (max_num - min_num) * torch.rand((m, k), device='npu', dtype=torch.float16)
+    b_npu = min_num + (max_num - min_num) * torch.rand((k, n), device='npu', dtype=torch.float16)
 
-    golden = (np.matmul(x1_gm.astype(np.float32), x2_gm.astype(np.float32))).astype(np.float32)
-    return x1_gm, x2_gm, golden 
+    x_npu = a_npu.to(torch.float32)
+    y_npu = b_npu.to(torch.float32)
+    golden = torch.matmul(x_npu, y_npu)
+    print(f"golden is {golden}")
+    return a_npu, b_npu, golden 
 
 
 def verify_result(output, golden):
@@ -127,9 +128,7 @@ def try_parse_args():
 
 
 def test_bench_dga(args):
-    x1_gm, x2_gm, golden = gen_golden_data(args.m, args.n, args.k)
-    x_npu = torch.tensor(x1_gm, device='npu')
-    y_npu = torch.tensor(x2_gm, device='npu')
+    x_npu, y_npu, golden = gen_golden_data(args.m, args.n, args.k)
 
     # 28 params
     params_list = [
@@ -147,7 +146,7 @@ def test_bench_dga(args):
 
     z_npu = torch.zeros(length_z, device='npu', dtype=torch.float32)
     deep_gemm_ascend.run_mmad_bench(x_npu, y_npu, z_npu, params_npu)
-    verify_result(z_npu.cpu().numpy(), golden)
+    verify_result(z_npu.cpu().numpy(), golden.cpu().numpy())
 
 
 if __name__ == "__main__":
