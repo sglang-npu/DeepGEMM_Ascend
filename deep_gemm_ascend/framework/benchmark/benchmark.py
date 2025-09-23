@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 import deep_gemm_ascend 
 import subprocess
+import math
 
 torch.npu.config.allow_internal_format = False
 relative_tol = 1e-6
@@ -155,6 +156,26 @@ class Parameter():
 
         print(f'Grid valid parameter group {len(parameters)}')
         return parameters
+    
+    def filter_parameters(self, shape):
+        M, N, K = shape
+        
+        max_m_sec_o_blocks = math.ceil(M / 16)
+        max_n_sec_o_blocks = math.ceil(N / 16)
+        max_k_o_iter_blocks = math.ceil(K / 16)
+        
+        # 过滤符合条件的参数
+        filtered_params = []
+        for param in self.grid_parameters:
+            if (param['m_sections'] <= M and
+                param['n_sections'] <= N and
+                param['m_sec_o_blocks'] <= max_m_sec_o_blocks and
+                param['n_sec_o_blocks'] <= max_n_sec_o_blocks and
+                param['k_o_iter_blocks'] <= max_k_o_iter_blocks):
+                filtered_params.append(param)
+        
+        print(f'Filtered parameters count: {len(filtered_params)}')
+        return filtered_params
 
 
 @dataclass
@@ -241,7 +262,8 @@ class GEMMBenchmarkRunner():
            break_idx = check_content['break_idx']
 
         results = []
-        total_params = len(self.parameters.grid_parameters)
+
+        total_params = len(self.parameters.filter_parameters(shape))
         with tqdm(total=total_params, initial=start_idx, desc=f"Testing shape {shape}", postfix={"Processed": start_idx, "Valid": saved_count}) as pbar:
             for idx, parameters in enumerate(self.parameters.grid_parameters[start_idx:], start=start_idx):
                 if idx == break_idx: # todo 模拟 break_id
