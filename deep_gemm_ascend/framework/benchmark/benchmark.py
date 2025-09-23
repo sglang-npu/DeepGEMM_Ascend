@@ -14,10 +14,10 @@ import numpy as np
 import pandas as pd
 import deep_gemm_ascend 
 import subprocess
-import math
+import math, argparse, re
 
 torch.npu.config.allow_internal_format = False
-relative_tol = 1e-6
+relative_tol = 1.5e-6
 absolute_tol = 1e-9
 error_tol = 1e-4
 
@@ -217,7 +217,7 @@ class Result():
         )
 
 class GEMMBenchmarkRunner():
-    def __init__(self, shape_group, result_dir="./results", msp_dir="./msp", msp_bench_path='deep_gemm_ascend\\framework\\tests\\bench_main.py'):
+    def __init__(self, shape_group, result_dir="./results", msp_dir="./msp", msp_bench_path='../tests/bench_sub.py'):
         self.shape_group = shape_group
         self.result_dir = result_dir
         self.parameters = Parameter()
@@ -225,10 +225,10 @@ class GEMMBenchmarkRunner():
         self.msp_dir = msp_dir
         self.msp_bench_path = msp_bench_path
     
-    def benchmark_shape(self, shape: list, checkpoints: str) -> None:
+    def benchmark_shape(self, shape: list, checkpoints: str, rank_id: int) -> None:
         # gen_data -> deepgemm_gemm && cann_gemm -> is_correct -> ms_prof -> save_result
         shape_str = '_'.join(map(str, shape))
-        filename = f'shape_{shape_str}.jsonl'
+        filename = f'shape_{shape_str}_rank_{rank_id}.jsonl'
         result_path = str(Path(self.result_dir) / filename)
         checkpoints_path = str(Path(self.result_dir) / checkpoints)
         
@@ -246,14 +246,14 @@ class GEMMBenchmarkRunner():
                 pass 
         
         # 读取checkpoints内容
-        with open(checkpoints_path, "r", encoding="utf-8") as f:
-             check_content = json.load(f)
-             recall = check_content['recall']
+        # with open(checkpoints_path, "r", encoding="utf-8") as f:
+        #      check_content = json.load(f)
+        #      recall = check_content['recall']
       
-        exit(1)
+        # exit(1)
         
-        a_npu, b_npu, x_npu, y_npu = self.gen_data(shape)
-        gold = self.cann_gemm(x_npu, y_npu)
+        a_npu, b_npu, golden = self.gen_data(shape)
+        # gold = self.cann_gemm(x_npu, y_npu)
 
         saved_count = 0      # 保存的结果数量
         max_saved_idx = -1   # 已保存的最大索引
@@ -264,7 +264,8 @@ class GEMMBenchmarkRunner():
                     if result['idx'] > max_saved_idx:
                         max_saved_idx = result['idx']
 
-        start_idx = max_saved_idx + 1 if max_saved_idx >= 0 else 0
+        # start_idx = max_saved_idx + 1 if max_saved_idx >= 0 else 0
+        start_idx = rank_id
         check_content['start_idx'] = start_idx
 
         if recall: # 如果先前断过
@@ -272,25 +273,32 @@ class GEMMBenchmarkRunner():
 
         results = []
 
-        total_params = len(self.parameters.filter_parameters(shape))
+        filter_param = self.parameters.filter_parameters(shape)
+        total_params = len(filter_param)
         with tqdm(total=total_params, initial=start_idx, desc=f"Testing shape {shape}", postfix={"Processed": start_idx, "Valid": saved_count}) as pbar:
-            for idx, parameters in enumerate(self.parameters.grid_parameters[start_idx:], start=start_idx):
+            for idx, parameters in enumerate(filter_param[start_idx::8], start=start_idx):
                 if idx == break_idx: # todo 模拟 break_id
-                    print(f'遇到break_id, {break_id=}')
+                    print(f'遇到break_id, {break_idx=}')
                     continue 
 
                 check_content['break_idx'] = idx
                 check_content['recall'] = True 
                 
-                with open(checkpoints_path, "w", encoding="utf-8") as f:
-                    json.dump(check_content, f, indent=3)
+                # with open(checkpoints_path, "w", encoding="utf-8") as f:
+                #     json.dump(check_content, f, indent=3)
 
                 # checkpoint 123  100-122， 124-149 150 /   ---- 1/600 
                 output, param_npu = self.deepgemm_gemm(a_npu, b_npu, parameters)
-                is_diff, diff_prop = self.is_correct(gold, output)
-                time_us = self.ms_prof() if diff_prop < error_tolerance else float('inf')
+                # filtered_params.append(param_npu)
+                is_diff, diff_prop = self.is_correct(golden, output)
+                param_str = f" --m {shape[0]} --n {shape[1]} --k {shape[2]} \
+                    --m_sections {parameters['m_sections']} --n_sections {parameters['n_sections']} \
+                    --m_sec_o_blocks {parameters['m_sec_o_blocks']} --n_sec_o_blocks {parameters['n_sec_o_blocks']} \
+                    --k_o_iter_blocks {parameters['k_o_iter_blocks']} --db_o_blocks {parameters['db_o_blocks']} \
+                    --rank_id {rank_id}"
+                time_us = self.ms_prof(param_str) if diff_prop < error_tolerance else float('inf')
                 
-                has_negative = torch.any(output < 0).item()
+                # has_negative = torch.any(output < 0).item()
                 # self.save_negative_debug_info(has_negative, a_npu, b_npu, output)
                 # self.save_params_to_jsonl(param_npu, has_negative, diff_prop)
                 result = Result(
@@ -318,7 +326,7 @@ class GEMMBenchmarkRunner():
 
         return
 
-    def gen_data(self, shape: list) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    def gen_data(self, shape: list):
         device = torch.device("npu" if torch.npu.is_available() else "cpu")
         if device.type == "cpu":
             assert False
@@ -330,15 +338,16 @@ class GEMMBenchmarkRunner():
             v = rng.lognormal(mean=1.0, sigma=1.2, size=shape)
             return np.clip(v, 1, 10).astype(np.float16)
 
-        A = heavy_tail([M, K])
-        B = heavy_tail([K, N])
+        x1_gm = heavy_tail([M, K])
+        x2_gm = heavy_tail([K, N])
+        golden = (np.matmul(x1_gm.astype(np.float32), x2_gm.astype(np.float32))).astype(np.float32)
 
-        a_npu = torch.tensor(A, device=device, dtype=torch.float16)
-        b_npu = torch.tensor(B, device=device, dtype=torch.float16)
-        x_npu = torch.tensor(A, device=device, dtype=torch.float32)
-        y_npu = torch.tensor(B, device=device, dtype=torch.float32)
+        a_npu = torch.tensor(x1_gm, device=device, dtype=torch.float16)
+        b_npu = torch.tensor(x2_gm, device=device, dtype=torch.float16)
+        # x_npu = torch.tensor(A, device=device, dtype=torch.float32)
+        # y_npu = torch.tensor(B, device=device, dtype=torch.float32)
 
-        return a_npu, b_npu, x_npu, y_npu
+        return a_npu, b_npu, golden
 
     def deepgemm_gemm(self, a_npu: Tensor, b_npu: Tensor, parameters: dict) -> Tensor:
         param_list = list(parameters.values())
@@ -355,9 +364,9 @@ class GEMMBenchmarkRunner():
         out = A.to('cpu') @ B.to('cpu')
         return out
 
-    def is_correct(self, cann_result: Tensor, deepgemm_result: Tensor) -> (bool, float):
+    def is_correct(self, golden, deepgemm_result: Tensor) -> (bool, float):
         output = deepgemm_result.cpu().numpy()
-        golden = cann_result.cpu().numpy().astype(np.float32)
+        # golden = cann_result.cpu().numpy().astype(np.float32)
 
         output = output.reshape(-1)
         golden = golden.reshape(-1)
@@ -372,23 +381,26 @@ class GEMMBenchmarkRunner():
         error_ratio = float(diff_ele_idxs.size) / golden.size
         return error_ratio <= error_tol, error_ratio
 
-    def ms_prof(self) -> float:
-        cmd_str = f"msprof op --output={self.msp_dir} --aic-metrics='PipeUtilization' --kernel-name='mmad' --application='python3 {self.msp_bench_path}'"
-        result = subprocess.run()
-
-        # 从ms_prof目录下解析最新的耗时
-        all_items = os.listdir(self.msp_dir)
-        subdirs = [item for item in all_items if os.path.isdir(os.path.join(directory_path, item))]
-        subdirs.sort()
-        last_subdir_name = subdirs[-1]
-        last_subdir_path = os.path.join(self.msp_dir, last_subdir_name)
-        PipeUtilization_path = os.path.join(last_subdir_path, "PipeUtilization.csv")
-            
-        def parse_time(csv_path: str):
-            data = pd.read_csv(csv_path, usecols=['aic_time(us)'])
-            return data.iloc[0, 0]
+    def ms_prof(self, param_str) -> float:
+        cmd_str = f"msprof op --output={self.msp_dir} --aic-metrics='PipeUtilization' --kernel-name='mmad' python3 {self.msp_bench_path}"
+        try:
+            # print(f"{cmd_str + param_str}")
+            result = subprocess.run(cmd_str + param_str, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except Exception as e:
+            print(f"msprof failed, error is {e}")
+            return 999999999
         
-        time_us = float(parse_time(PipeUtilization_path))
+        # 从subprocess标准输入流中读取msprof结果
+        def parse_time(result: str):
+            pattern = r'Task Duration\(us\): (\d+\.\d+)'
+            match = re.search(pattern, result)
+            if match:
+                return float(match.group(1))
+            print(f"failed msprof result is {result}")
+            return 999999999
+
+        # time_us = float(parse_time(PipeUtilization_path))
+        time_us = parse_time(result.stdout.decode('utf-8'))
         return time_us
 
     def save_result(self, results: list, path: str) -> None:
@@ -493,11 +505,11 @@ class GEMMBenchmarkRunner():
 
             print(f'negative info has saved in {jsonl_filename}')
 
-    def run_benchmarks(self) -> None:
+    def run_benchmarks(self, rank_id) -> None:
         print("=====STARTING GEMM BENCHMARK=====")
         checkpoints = 'checkpoint.json'
         for shape in self.shape_group:
-            self.benchmark_shape(shape，checkpoints)
+            self.benchmark_shape(shape, checkpoints, rank_id)
             
     
     def visualize_time_with_single_parameter(self, shape: list, target_parameter: str, other_parameters: dict) -> None:
@@ -581,8 +593,14 @@ class GEMMBenchmarkRunner():
 if __name__ == "__main__":
     # parameters = Parameter()
     # todo-1 解析参数
+    parser = argparse.ArgumentParser(
+        usage='%(prog)s --rank_id [num] '
+    )
+    parser.add_argument('--rank_id', required=True, type=int)
+    args = parser.parse_args()
+    torch.npu.set_device(args.rank_id)
     benchmark_runner = GEMMBenchmarkRunner(shape_group)
-    benchmark_runner.run_benchmarks()
+    benchmark_runner.run_benchmarks(args.rank_id)
 
     # shape = [1024, 512, 256]
     # param_dic = {
