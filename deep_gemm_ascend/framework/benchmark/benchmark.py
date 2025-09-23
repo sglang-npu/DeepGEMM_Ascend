@@ -159,6 +159,12 @@ class Parameter():
     def filter_parameters(self, shape):
         M, N, K = shape
         
+        max_m_sections = math.ceil(M / 16)
+        max_n_sections = math.ceil(N / 16)
+
+        min_m_sec_o_blocks = min(2, math.ceil(M / 16))
+        min_n_sec_o_blocks = min(2, math.ceil(N / 16))
+        min_k_o_iter_blocks = min(2, math.ceil(K / 16))
         max_m_sec_o_blocks = math.ceil(M / 16)
         max_n_sec_o_blocks = math.ceil(N / 16)
         max_k_o_iter_blocks = math.ceil(K / 16)
@@ -166,8 +172,11 @@ class Parameter():
         # 过滤符合条件的参数
         filtered_params = []
         for param in self.grid_parameters:
-            if (param['m_sections'] <= M and
-                param['n_sections'] <= N and
+            if (param['m_sections'] <= max_m_sections and
+                param['n_sections'] <= max_n_sections and
+                param['m_sec_o_blocks'] >= min_m_sec_o_blocks and
+                param['n_sec_o_blocks'] >= min_n_sec_o_blocks and
+                param['k_o_iter_blocks'] >= min_k_o_iter_blocks and 
                 param['m_sec_o_blocks'] <= max_m_sec_o_blocks and
                 param['n_sec_o_blocks'] <= max_n_sec_o_blocks and
                 param['k_o_iter_blocks'] <= max_k_o_iter_blocks):
