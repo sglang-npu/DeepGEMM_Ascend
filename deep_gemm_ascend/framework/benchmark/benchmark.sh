@@ -4,7 +4,6 @@
 SCRIPT="benchmark.py"
 # 监控间隔时间(毫秒)
 INTERVAL=100
-CHECKPOINTS_FILE="checkpoints.json"
 # 日志文件
 LOG_FILE="monitor.log"
 
@@ -32,7 +31,7 @@ while true; do
         # 进程不存在，重启它
         RESTART_COUNT=$((RESTART_COUNT + 1))
         echo "[$(date)] 检测到进程已退出，第 $RESTART_COUNT 次重启..." 
-
+        # todo - checkpoint 没内容不重启 
         python3 "$SCRIPT" & # todo 设置 checkpoints_file 如果checkpoints 没有值，则是正常退出。
         log "$SCRIPT (PID: $PID) 已退出，准备重启"`
         break

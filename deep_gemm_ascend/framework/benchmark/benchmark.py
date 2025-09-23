@@ -12,7 +12,7 @@ import jsonlines
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import deep_gemm_ascend
+import deep_gemm_ascend 
 import subprocess
 
 torch.npu.config.allow_internal_format = False
@@ -21,7 +21,7 @@ absolute_tol = 1e-9
 error_tol = 1e-4
 
 shape_group = [
-    # M、N、K
+    # M、N、K   
     [8, 4096, 7168],
     # [8, 7168, 18432],
     # [8, 18432, 7168],
@@ -190,12 +190,33 @@ class GEMMBenchmarkRunner():
         self.msp_dir = msp_dir
         self.msp_bench_path = msp_bench_path
     
-    def benchmark_shape(self, shape: list) -> None:
+    def benchmark_shape(self, shape: list, checkpoints: str) -> None:
         # gen_data -> deepgemm_gemm && cann_gemm -> is_correct -> ms_prof -> save_result
         shape_str = '_'.join(map(str, shape))
         filename = f'shape_{shape_str}.jsonl'
         result_path = str(Path(self.result_dir) / filename)
+        checkpoints_path = str(Path(self.result_dir) / checkpoints)
+        
+        check_content = dict()
+        start_idx = 0
+        break_idx = -1
+        recall = False 
 
+        if not checkpoints_path: # 如果没有checkpoint，则创建文件
+           with open(checkpoints_path, "w", encoding="utf-8") as f:
+                check_content['start_idx'] = start_idx
+                check_content['break_idx'] = break_idx 
+                check_content['recall'] = False
+                json.dump(check_content, f, indent=3)
+                pass 
+        
+        # 读取checkpoints内容
+        with open(checkpoints_path, "r", encoding="utf-8") as f:
+             check_content = json.load(f)
+             recall = check_content['recall']
+      
+        exit(1)
+        
         a_npu, b_npu, x_npu, y_npu = self.gen_data(shape)
         gold = self.cann_gemm(x_npu, y_npu)
 
@@ -209,10 +230,26 @@ class GEMMBenchmarkRunner():
                         max_saved_idx = result['idx']
 
         start_idx = max_saved_idx + 1 if max_saved_idx >= 0 else 0
+        check_content['start_idx'] = start_idx
+
+        if recall: # 如果先前断过
+           break_idx = check_content['break_idx']
+
         results = []
         total_params = len(self.parameters.grid_parameters)
         with tqdm(total=total_params, initial=start_idx, desc=f"Testing shape {shape}", postfix={"Processed": start_idx, "Valid": saved_count}) as pbar:
             for idx, parameters in enumerate(self.parameters.grid_parameters[start_idx:], start=start_idx):
+                if idx == break_idx: # todo 模拟 break_id
+                    print(f'遇到break_id, {break_id=}')
+                    continue 
+
+                check_content['break_idx'] = idx
+                check_content['recall'] = True 
+                
+                with open(checkpoints_path, "w", encoding="utf-8") as f:
+                    json.dump(check_content, f, indent=3)
+
+                # checkpoint 123  100-122， 124-149 150 /   ---- 1/600 
                 output = self.deepgemm_gemm(a_npu, b_npu, parameters)
                 is_diff, diff_prop = self.is_correct(gold, output)
                 time_us = self.ms_prof() if diff_prop < error_tolerance else float('inf')
@@ -228,7 +265,7 @@ class GEMMBenchmarkRunner():
                 results.append(result)
                 saved_count += 1
                 
-                if len(results) == 100 or idx == total_params:
+                if len(results) == 100 or idx == total_params or recall: 
                     if results:
                         self.save_result(results, result_path)
                         results = []
@@ -248,6 +285,19 @@ class GEMMBenchmarkRunner():
 
         M, N, K = shape
 
+        # rng = np.random.default_rng()
+
+        # def heavy_tail(shape):
+        #     v = rng.lognormal(mean=0, sigma=1, size=shape)
+        #     return np.clip(v, -1, 1).astype(np.float16)
+
+        # A = heavy_tail([M, K])
+        # B = heavy_tail([K, N])
+
+        # a_npu = torch.tensor(A, device=device, dtype=torch.float16)
+        # b_npu = torch.tensor(B, device=device, dtype=torch.float16)
+        # x_npu = torch.tensor(A, device=device, dtype=torch.float32)
+        # y_npu = torch.tensor(B, device=device, dtype=torch.float32)
         # 定义目标范围 [a, b)
         a = 1.0  # 最小值
         b = 10.0  # 最大值
@@ -386,9 +436,9 @@ class GEMMBenchmarkRunner():
 
     def run_benchmarks(self) -> None:
         print("=====STARTING GEMM BENCHMARK=====")
-
+        checkpoints = 'checkpoint.json'
         for shape in self.shape_group:
-            self.benchmark_shape(shape)
+            self.benchmark_shape(shape，checkpoints)
             
     
     def visualize_time_with_single_parameter(self, shape: list, target_parameter: str, other_parameters: dict) -> None:
@@ -471,6 +521,7 @@ class GEMMBenchmarkRunner():
 
 if __name__ == "__main__":
     # parameters = Parameter()
+    # todo-1 解析参数
     benchmark_runner = GEMMBenchmarkRunner(shape_group)
     benchmark_runner.run_benchmarks()
 
