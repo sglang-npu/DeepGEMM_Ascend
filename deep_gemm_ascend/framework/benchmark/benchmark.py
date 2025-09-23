@@ -291,8 +291,8 @@ class GEMMBenchmarkRunner():
                 time_us = self.ms_prof() if diff_prop < error_tolerance else float('inf')
                 
                 has_negative = torch.any(output < 0).item()
-                self.save_negative_debug_info(has_negative, a_npu, b_npu, output)
-                self.save_params_to_jsonl(param_npu, has_negative, diff_prop)
+                # self.save_negative_debug_info(has_negative, a_npu, b_npu, output)
+                # self.save_params_to_jsonl(param_npu, has_negative, diff_prop)
                 result = Result(
                     idx=idx,
                     M=shape[0],
