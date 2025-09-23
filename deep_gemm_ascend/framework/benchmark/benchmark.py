@@ -21,7 +21,7 @@ absolute_tol = 1e-9
 error_tol = 1e-4
 
 shape_group = [
-    # M、N、K   
+    # M、N、K
     [8, 4096, 7168],
     # [8, 7168, 18432],
     # [8, 18432, 7168],
@@ -68,15 +68,18 @@ class Parameter():
     def generate_mnk_db_o_blocks(self):
         for m_sec_o_blocks in range(1, 128):
             for n_sec_o_blocks in range(1, 128 - m_sec_o_blocks):
-                sum_mn = m_sec_o_blocks + n_sec_o_blocks
-                # Rule 2：(m + n) × k < 1024 → k < 1024/(m + n)
-                max_k = 1023 // sum_mn // 2
+                # Rule 4: m × n <= 128
+                if m_sec_o_blocks * n_sec_o_blocks > 128:
+                    continue
+
+                # Rule 2：(m + n) × k × 2 < 1024 → k < 1024/(m + n)/2
+                max_k_o_iter_blocks = 1023 // (m_sec_o_blocks + n_sec_o_blocks) // 2
 
                 # Rule 3：m_sec_o_blocks × db_o_blocks <= 128 && n_sec_o_blocks × db_o_blocks <= 128 → db_o_blocks <= min(128/m_sec_o_blocks, 128/m_sec_o_blocks)
                 max_db_from_m = 128 // m_sec_o_blocks
                 max_db_from_n = 128 // n_sec_o_blocks
                 max_db = min(max_db_from_m, max_db_from_n)
-                for k_o_iter_blocks in range(1, max_k + 1):
+                for k_o_iter_blocks in range(1, max_k_o_iter_blocks + 1):
                     for db_o_blocks in range(1, max_db + 1):
                         yield m_sec_o_blocks, n_sec_o_blocks, k_o_iter_blocks, db_o_blocks
 
@@ -88,15 +91,17 @@ class Parameter():
 
         for m_sec_o_blocks in m_sec_o_blocks_values:
             for n_sec_o_blocks in n_sec_o_blocks_values:
-                sum_mn = m_sec_o_blocks + n_sec_o_blocks
-                # Rule 2：(m + n) × k < 1024 → k < 1024/(m + n)
-                max_k = 1023 // sum_mn // 2
+                # Rule 4: m × n <= 128
+                if m_sec_o_blocks * n_sec_o_blocks > 128:
+                    continue
 
+                # Rule 2：(m + n) × k × 2 < 1024 → k < 1024/(m + n)/2
+                max_k_o_iter_blocks = 1023 // (m_sec_o_blocks + n_sec_o_blocks) // 2
                 for k_o_iter_blocks in k_o_iter_blocks_values:
-                    # Rule 3：m_sec_o_blocks × db_o_blocks <= 128 && n_sec_o_blocks × db_o_blocks <= 128 → db_o_blocks <= min(128/m_sec_o_blocks, 128/m_sec_o_blocks)
-                    if k_o_iter_blocks > max_k:
+                    if k_o_iter_blocks > max_k_o_iter_blocks:
                         continue
 
+                    # Rule 3：m_sec_o_blocks × db_o_blocks <= 128 && n_sec_o_blocks × db_o_blocks <= 128 → db_o_blocks <= min(128/m_sec_o_blocks, 128/m_sec_o_blocks)
                     max_db_o_blocks_from_m = 128 // m_sec_o_blocks
                     max_db_o_blocks_from_n = 128 // n_sec_o_blocks
                     max_db_o_blocks = min([max_db_o_blocks_from_m, max_db_o_blocks_from_n, k_o_iter_blocks])
@@ -182,7 +187,7 @@ class Result():
         )
 
 class GEMMBenchmarkRunner():
-    def __init__(self, shape_group, result_dir="./results", msp_dir="./msp", msp_bench_path='../tests/bench_main.py'):
+    def __init__(self, shape_group, result_dir="./results", msp_dir="./msp", msp_bench_path='deep_gemm_ascend\\framework\\tests\\bench_main.py'):
         self.shape_group = shape_group
         self.result_dir = result_dir
         self.parameters = Parameter()
@@ -250,9 +255,13 @@ class GEMMBenchmarkRunner():
                     json.dump(check_content, f, indent=3)
 
                 # checkpoint 123  100-122， 124-149 150 /   ---- 1/600 
-                output = self.deepgemm_gemm(a_npu, b_npu, parameters)
+                output, param_npu = self.deepgemm_gemm(a_npu, b_npu, parameters)
                 is_diff, diff_prop = self.is_correct(gold, output)
                 time_us = self.ms_prof() if diff_prop < error_tolerance else float('inf')
+                
+                has_negative = torch.any(output < 0).item()
+                self.save_negative_debug_info(has_negative, a_npu, b_npu, output)
+                self.save_params_to_jsonl(param_npu, has_negative, diff_prop)
                 result = Result(
                     idx=idx,
                     M=shape[0],
@@ -284,31 +293,19 @@ class GEMMBenchmarkRunner():
             assert False
 
         M, N, K = shape
+        rng = np.random.default_rng()
 
-        # rng = np.random.default_rng()
+        def heavy_tail(shape):
+            v = rng.lognormal(mean=1.0, sigma=1.2, size=shape)
+            return np.clip(v, 1, 10).astype(np.float16)
 
-        # def heavy_tail(shape):
-        #     v = rng.lognormal(mean=0, sigma=1, size=shape)
-        #     return np.clip(v, -1, 1).astype(np.float16)
+        A = heavy_tail([M, K])
+        B = heavy_tail([K, N])
 
-        # A = heavy_tail([M, K])
-        # B = heavy_tail([K, N])
-
-        # a_npu = torch.tensor(A, device=device, dtype=torch.float16)
-        # b_npu = torch.tensor(B, device=device, dtype=torch.float16)
-        # x_npu = torch.tensor(A, device=device, dtype=torch.float32)
-        # y_npu = torch.tensor(B, device=device, dtype=torch.float32)
-        # 定义目标范围 [a, b)
-        a = 1.0  # 最小值
-        b = 10.0  # 最大值
-
-        A = a + (b - a) * torch.rand((M, K), device=device, dtype=torch.float16)
-        B = a + (b - a) * torch.rand((K, N), device=device, dtype=torch.float16)
-
-        a_npu = A
-        b_npu = B
-        x_npu = A.cpu().to(torch.float32).to(device)
-        y_npu = B.cpu().to(torch.float32).to(device)
+        a_npu = torch.tensor(A, device=device, dtype=torch.float16)
+        b_npu = torch.tensor(B, device=device, dtype=torch.float16)
+        x_npu = torch.tensor(A, device=device, dtype=torch.float32)
+        y_npu = torch.tensor(B, device=device, dtype=torch.float32)
 
         return a_npu, b_npu, x_npu, y_npu
 
@@ -321,9 +318,7 @@ class GEMMBenchmarkRunner():
         z_npu = torch.empty(z_shape, device='npu', dtype=torch.float32)
 
         deep_gemm_ascend.run_mmad_bench(a_npu, b_npu, z_npu, param_npu)
-        has_negative = torch.any(z_npu < 0).item()
-        self.save_params_to_excel(param_npu, has_negative)
-        return z_npu
+        return z_npu, param_npu
 
     def cann_gemm(self, A: Tensor, B: Tensor) -> Tensor:
         out = A.to('cpu') @ B.to('cpu')
@@ -347,9 +342,7 @@ class GEMMBenchmarkRunner():
         return error_ratio <= error_tol, error_ratio
 
     def ms_prof(self) -> float:
-        application_cmd = f"python3 {self.msp_bench_path} --m 96 --n 1536 --k 5952 \
-        --m_sections 1 --n_sections 1 --m_sec_o_blocks 3 --n_sec_o_blocks 8 --k_o_iter_blocks 20 --db_o_blocks 10"
-        cmd_str = f"msprof op --output={self.msp_dir} --aic-metrics='PipeUtilization' --kernel-name='mmad' --application='{application_cmd}'"
+        cmd_str = f"msprof op --output={self.msp_dir} --aic-metrics='PipeUtilization' --kernel-name='mmad' --application='python3 {self.msp_bench_path}'"
         result = subprocess.run()
 
         # 从ms_prof目录下解析最新的耗时
@@ -366,8 +359,7 @@ class GEMMBenchmarkRunner():
         
         time_us = float(parse_time(PipeUtilization_path))
         return time_us
-        
-    
+
     def save_result(self, results: list, path: str) -> None:
         result_dicts = []
         for result in results:
@@ -386,7 +378,7 @@ class GEMMBenchmarkRunner():
         except Exception as e:
             print(f"process data error: {e}")
     
-    def save_params_to_excel(self, params: list, is_negative: bool, excel_file_path="./params.xlsx") -> None:
+    def save_params_to_jsonl(self, params: list, is_negative: bool, diff: float, jsonl_file_path="./params.jsonl") -> None:
         param_names = {
             0: "m_sections",
             1: "n_sections",
@@ -395,8 +387,8 @@ class GEMMBenchmarkRunner():
             4: "k_o_iter_blocks",
             5: "db_o_blocks",
             6: "m",
-            7: "n",
-            8: "k",
+            7: "k",
+            8: "n",
             9: "batch",
             10: "k_iters",
             11: "m_blocks",
@@ -419,20 +411,56 @@ class GEMMBenchmarkRunner():
         }
         data_dict = {}
         for i, param in enumerate(params):
-            param_name = param_names.get(i, f"{i}")
-            data_dict[param_name] = param.item()
+            param_name = param_names.get(i, f"param_{i}")
+            data_dict[param_name] = param.item() if hasattr(param, 'item') else param
         data_dict["negative"] = is_negative
+        data_dict["diff"] = diff
 
         self.parameter_cache.append(data_dict)
 
         if len(self.parameter_cache) >= 100:
-            df = pd.DataFrame(self.parameter_cache)
-            if not os.path.exists(excel_file_path):
-                df.to_excel(excel_file_path, index=False)
-            else:
-                with pd.ExcelWriter(excel_file_path, mode='a', if_sheet_exists='overlay') as writer:
-                    df.to_excel(writer, index=False, header=False, startrow=writer.sheets['Sheet1'].max_row)
+            Path(jsonl_file_path).parent.mkdir(parents=True, exist_ok=True)
+            
+            with jsonlines.open(jsonl_file_path, mode='a') as writer:
+                writer.write_all(self.parameter_cache)
+            
             self.parameter_cache = []
+
+    def save_negative_debug_info(self, has_negative:bool, x_npu:Tensor, y_npu:Tensor, z_npu:Tensor):
+        if has_negative:
+            print(f"exist negative!!")
+
+            negative_indices = torch.where(z_npu < 0)
+            num_negatives = len(negative_indices[0])
+            
+            x_cpu = x_npu.cpu().numpy().tolist()
+            y_cpu = y_npu.cpu().numpy().tolist()
+            z_cpu = z_npu.cpu().numpy().tolist()
+
+            jsonl_filename = "negative_debug_info.jsonl"
+            with open(jsonl_filename, 'a', encoding='utf-8') as f:
+                for idx in range(num_negatives):
+                    i = negative_indices[0][idx].item()
+                    j = negative_indices[1][idx].item()
+                    negative_value = z_npu[i, j].item()
+                    x_slice = x_npu[i, :]
+                    y_slice = y_npu[:, j]
+
+                    debug_info = {
+                        "negative_location": {"row":i, "col":j},
+                        "negative_value": negative_value,
+                        "x_npu_slice_i_row": x_slice.cpu().numpy().tolist(),
+                        "y_npu_slice_j_col": y_slice.cpu().numpy().tolist(),
+                        "params_npu": params_npu,
+                        "x": x_cpu,
+                        "y": y_cpu,
+                        "z": z_npu
+                    }
+            
+                    json_line = json.dumps(debug_info, ensure_ascii=False)
+                    f.write(json_line + '\n')
+
+            print(f'negative info has saved in {jsonl_filename}')
 
     def run_benchmarks(self) -> None:
         print("=====STARTING GEMM BENCHMARK=====")

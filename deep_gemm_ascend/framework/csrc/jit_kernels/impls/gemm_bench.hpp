@@ -65,7 +65,7 @@ static void mmad_bench(const at::Tensor &x, const at::Tensor &y, at::Tensor &z, 
         m_sections, n_sections, m_sec_o_blocks, n_sec_o_blocks, k_o_iter_blocks, db_o_blocks);
 
     // 2 generate code
-    std::vector<uint32_t> config_list_ori{config.m, config.k, config.n, config.batch,
+    std::vector<uint32_t> config_list_ori{config.m, config.n, config.k, config.batch,
         config.k_iters, config.m_blocks, config.n_blocks, config.k_blocks, config.m_sc_blocks, config.n_sc_blocks,
         config.m_o_fix, config.n_o_fix, config.k_o_fix, config.db_o_num, config.m_parts, config.n_parts,
         config.r_m_parts, config.r_n_parts, config.r_m_blocks, config.r_n_blocks, config.r_k_blocks, config.r_db_num};

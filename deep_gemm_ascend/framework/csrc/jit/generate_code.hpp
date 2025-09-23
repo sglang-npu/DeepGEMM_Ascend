@@ -95,8 +95,8 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
     uint32_t k_o_iter_blocks = paramGM.GetValue(4);
     uint32_t db_o_blocks = paramGM.GetValue(5);
     uint32_t m = paramGM.GetValue(6);
-    uint32_t k = paramGM.GetValue(7);
-    uint32_t n = paramGM.GetValue(8);
+    uint32_t n = paramGM.GetValue(7);
+    uint32_t k = paramGM.GetValue(8);
     uint32_t batch = paramGM.GetValue(9);
     int k_iters = paramGM.GetValue(10);
     uint32_t m_blocks = paramGM.GetValue(11);
