@@ -1,9 +1,10 @@
 #include "kernel_operator.h"
 
-#define CUBE_BLOCK          16
-#define CUBE_BLOCK_SIZE     256
+#define CUBE_BLOCK          16   // block的行列数，单位字节
+#define CUBE_BLOCK_SIZE     256  // block的总大小，单位字节
 
-__aicore__ inline uint32_t CeilCubeBlock(uint32_t len) {
+__aicore__ inline uint32_t CeilCubeBlock(uint32_t len)
+{
     return (len + CUBE_BLOCK - 1) / CUBE_BLOCK;
 }
 
@@ -44,17 +45,17 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
     AscendC::GlobalTensor<int> paramGM;
     paramGM.SetGlobalBuffer((__gm__ int *)params);
 
-    uint32_t m_sections = paramGM.GetValue(0);
-    uint32_t n_sections = paramGM.GetValue(1);
-    uint32_t m_sec_o_blocks = paramGM.GetValue(2);
-    uint32_t n_sec_o_blocks = paramGM.GetValue(3);
-    uint32_t k_o_iter_blocks = paramGM.GetValue(4);
-    uint32_t db_o_blocks = paramGM.GetValue(5);
+    uint32_t m_sections = paramGM.GetValue(0); // 核间切分，m维度切分数量
+    uint32_t n_sections = paramGM.GetValue(1); // 核间切分，n维度切分数量
+    uint32_t m_sec_o_blocks = paramGM.GetValue(2); // 核内切分，m维度每块的大小，单位block
+    uint32_t n_sec_o_blocks = paramGM.GetValue(3); // 核内切分，n维度每块的大小，单位block
+    uint32_t k_o_iter_blocks = paramGM.GetValue(4); // 核内切分，k维度每块的大小，单位block
+    uint32_t db_o_blocks = paramGM.GetValue(5); // 核内切分，double buffer每块的大小，单位block
     uint32_t m = paramGM.GetValue(6);
     uint32_t k = paramGM.GetValue(7);
     uint32_t n = paramGM.GetValue(8);
     uint32_t batch = paramGM.GetValue(9);
-    int k_iters = paramGM.GetValue(10);
+    uint32_t k_iters = paramGM.GetValue(10);
     uint32_t m_blocks = paramGM.GetValue(11);
     uint32_t n_blocks = paramGM.GetValue(12);
     uint32_t k_blocks = paramGM.GetValue(13);
@@ -113,7 +114,7 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
         AscendC::GlobalTensor<half> aGM;
         aGM.SetGlobalBuffer((__gm__ half *)a);
         AscendC::TQue<AscendC::TPosition::A1, 1> inQueueA1;
-        pipe.InitBuffer(inQueueA1, 2, a_buffer_size * sizeof(half));
+        pipe.InitBuffer(inQueueA1, 2, a_buffer_size * sizeof(half)); // 每个A1分配出两块内存，每块大小为a_buffer_size * 2字节（half）
 
         AscendC::GlobalTensor<half> bGM;
         bGM.SetGlobalBuffer((__gm__ half *)b);
@@ -124,7 +125,7 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
         cGM.SetGlobalBuffer((__gm__ float *)c);
 
         AscendC::TQue<AscendC::TPosition::CO1, 1> outQueueCO1;
-        pipe.InitBuffer(outQueueCO1, 1, c_buffer_size * sizeof(float));
+        pipe.InitBuffer(outQueueCO1, 1, c_buffer_size * sizeof(float)); // 每个A1分配出两块内存，每块大小为c_buffer_size * 4字节（float）
         AscendC::LocalTensor<float> c1Local = outQueueCO1.AllocTensor<float>();
 
         AscendC::TQue<AscendC::TPosition::A2, 1> inQueueA2;
@@ -184,12 +185,12 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
 
                     a1Local = inQueueA1.AllocTensor<half>();
                     a_offset = CalcAOffset(mi, k, m_sec_o_blocks, ki, k_o_iter_blocks);
-                    nd2nzParams.ndNum = 1;
-                    nd2nzParams.nValue = BlockLen(msec_blocks);
+                    nd2nzParams.ndNum = 1; // 每次只需要搬一个矩阵
+                    nd2nzParams.nValue = BlockLen(msec_blocks); // 矩阵大小为nValue * dValue
                     nd2nzParams.dValue = BlockLen(k_iter_blocks);
-                    nd2nzParams.srcNdMatrixStride = 0;
-                    nd2nzParams.srcDValue = k;
-                    nd2nzParams.dstNzC0Stride = BlockLen(msec_blocks);
+                    nd2nzParams.srcNdMatrixStride = 0; // 只有1个矩阵，不需要偏移
+                    nd2nzParams.srcDValue = k; // 每行偏移为k
+                    nd2nzParams.dstNzC0Stride = BlockLen(msec_blocks); // 转换后，每行为BlockLen(msec_blocks) * CUBE_BLOCK个数据
                     nd2nzParams.dstNzNStride = 1;
                     nd2nzParams.dstNzMatrixStride = 0;
                     AscendC::DataCopy(a1Local, aGM[offsetA + a_offset], nd2nzParams);
