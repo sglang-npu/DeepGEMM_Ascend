@@ -195,6 +195,7 @@ class Result():
     K: int
     time: float
     diff: float
+    negative: bool
     parameters: Dict[str, int] = field(default_factory=lambda:{
         'm_sections': 0,
         'n_sections': 0,
@@ -208,122 +209,121 @@ class Result():
     def from_dict(cls, data: dict) -> 'Result':
         """Create a Result object from a dictionary"""
         return cls(
+            idx=data['idx'],
             M=data['M'],
             N=data['N'],
             K=data['K'],
             time=data['time'],
-            idx=data['idx'],
+            diff=data['diff'],
+            negative=data['negative'],
             parameters=data.get('parameters', {})
         )
 
 class GEMMBenchmarkRunner():
-    def __init__(self, shape_group, result_dir="./results", msp_dir="./msp", msp_bench_path='../tests/bench_sub.py'):
+    def __init__(self, shape_group, rank_id, num_processes, result_dir="./results", msp_dir="./msp", msp_bench_path='../tests/bench_sub.py'):
         self.shape_group = shape_group
         self.result_dir = result_dir
         self.parameters = Parameter()
         self.parameter_cache = []
         self.msp_dir = msp_dir
         self.msp_bench_path = msp_bench_path
+        self.rank_id = rank_id
+        self.num_processes = num_processes
     
-    def benchmark_shape(self, shape: list, checkpoints: str, rank_id: int) -> None:
-        # gen_data -> deepgemm_gemm && cann_gemm -> is_correct -> ms_prof -> save_result
+    # gen_data -> deepgemm_gemm && cann_gemm -> is_correct -> ms_prof -> save_result
+    def benchmark_shape(self, shape: list) -> None:
+        # 生成当前进程的文件路径
         shape_str = '_'.join(map(str, shape))
-        filename = f'shape_{shape_str}_rank_{rank_id}.jsonl'
-        result_path = str(Path(self.result_dir) / filename)
-        checkpoints_path = str(Path(self.result_dir) / checkpoints)
+        result_filename = f'shape_{shape_str}_rank_{self.rank_id}.jsonl'
+        result_path = str(Path(self.result_dir) / result_filename)
+        checkpoint_filename = f'shape_{shape_str}_rank_{self.rank_id}_checkpoint.jsonl'
+        checkpoint_path = str(Path(self.result_dir) / checkpoint_filename)
         
-        check_content = dict()
-        start_idx = 0
-        break_idx = -1
-        recall = False 
+        # 分配rank_id对应的【tiling参数组合 & 任务范围】
+        filter_params = self.parameters.filter_parameters(shape)
+        tasks_per_process = math.ceil(len(filter_params) / self.num_processes)
+        total_tasks = len(filter_params)
+        start_idx = self.rank_id * tasks_per_process
+        end_idx = min(start_idx + tasks_per_process, total_tasks)
+        process_params = filter_params[start_idx:end_idx]
+        process_task_count = len(process_params)
 
-        if not checkpoints_path: # 如果没有checkpoint，则创建文件
-           with open(checkpoints_path, "w", encoding="utf-8") as f:
-                check_content['start_idx'] = start_idx
-                check_content['break_idx'] = break_idx 
-                check_content['recall'] = False
-                json.dump(check_content, f, indent=3)
-                pass 
+        # 加载断点信息
+        last_process_idx = -1
+        if os.path.exists(checkpoint_path):
+            with open(checkpoint_path, "r", encoding="utf-8") as f:
+                checkpoint = json.load(f)
+                last_process_idx = checkpoint.get('last_process_idx', -1)
+
+        # 计算rank_id进程对应的start_local_idx
+        start_local_idx = 0
+        if last_process_idx >= start_idx:
+            start_local_idx = last_process_idx - start_idx
+            if start_local_idx >= process_task_count:
+                print(f"Rank {self.rank_id} 已完成所有任务，无需继续处理")
+                return
         
-        # 读取checkpoints内容
-        # with open(checkpoints_path, "r", encoding="utf-8") as f:
-        #      check_content = json.load(f)
-        #      recall = check_content['recall']
-      
-        # exit(1)
-        
+        # 生成输入数据 & ground truth
         a_npu, b_npu, golden = self.gen_data(shape)
-        # gold = self.cann_gemm(x_npu, y_npu)
 
-        saved_count = 0      # 保存的结果数量
-        max_saved_idx = -1   # 已保存的最大索引
-        if os.path.exists(result_path):
-            with jsonlines.open(result_path, mode='r') as reader:
-                for result in reader:
-                    saved_count += 1
-                    if result['idx'] > max_saved_idx:
-                        max_saved_idx = result['idx']
-
-        # start_idx = max_saved_idx + 1 if max_saved_idx >= 0 else 0
-        start_idx = rank_id
-        check_content['start_idx'] = start_idx
-
-        if recall: # 如果先前断过
-           break_idx = check_content['break_idx']
-
-        results = []
-
-        filter_param = self.parameters.filter_parameters(shape)
-        total_params = len(filter_param)
-        with tqdm(total=total_params, initial=start_idx, desc=f"Testing shape {shape}", postfix={"Processed": start_idx, "Valid": saved_count}) as pbar:
-            for idx, parameters in enumerate(filter_param[start_idx::8], start=start_idx):
-                if idx == break_idx: # todo 模拟 break_id
-                    print(f'遇到break_id, {break_idx=}')
-                    continue 
-
-                check_content['break_idx'] = idx
-                check_content['recall'] = True 
+        completed_count = max(0, last_process_idx - start_idx + 1) if last_process_idx >= start_idx else 0
+        with tqdm(total=process_task_count, initial=completed_count, desc=f"Rank {self.rank_id} Testing shape {shape}", postfix={"Processed": completed_count}) as pbar:
+            # 从断点开始处理任务
+            local_idx = start_local_idx
+            while local_idx < process_task_count:
+                global_idx = start_idx + local_idx
+                parameters = process_params[local_idx]
                 
-                # with open(checkpoints_path, "w", encoding="utf-8") as f:
-                #     json.dump(check_content, f, indent=3)
+                # 检查是否是需要跳过的错误索引
+                if global_idx == last_process_idx:
+                    print(f"Rank {self.rank_id} 跳过异常 Tiling组合索引: {global_idx}")
+                    local_idx += 1
+                    pbar.update(1)
+                    continue
 
-                # checkpoint 123  100-122， 124-149 150 /   ---- 1/600 
+                # 更新checkpoint
+                with open(checkpoint_path, "w", encoding="utf-8") as f:
+                    json.dump({
+                        "last_process_idx": global_idx
+                    }, f, indent=3)
+
+                # 【核心计算】
                 output, param_npu = self.deepgemm_gemm(a_npu, b_npu, parameters)
-                # filtered_params.append(param_npu)
                 is_diff, diff_prop = self.is_correct(golden, output)
+
+                # 【性能测试】
                 param_str = f" --m {shape[0]} --n {shape[1]} --k {shape[2]} \
                     --m_sections {parameters['m_sections']} --n_sections {parameters['n_sections']} \
                     --m_sec_o_blocks {parameters['m_sec_o_blocks']} --n_sec_o_blocks {parameters['n_sec_o_blocks']} \
                     --k_o_iter_blocks {parameters['k_o_iter_blocks']} --db_o_blocks {parameters['db_o_blocks']} \
-                    --rank_id {rank_id}"
+                    --rank_id {self.rank_id}"
                 time_us = self.ms_prof(param_str) if diff_prop < error_tolerance else float('inf')
                 
-                # has_negative = torch.any(output < 0).item()
+                has_negative = torch.any(output < 0).item()
                 # self.save_negative_debug_info(has_negative, a_npu, b_npu, output)
                 # self.save_params_to_jsonl(param_npu, has_negative, diff_prop)
+
+                # 【保存结果】
                 result = Result(
-                    idx=idx,
+                    idx=global_idx,
                     M=shape[0],
                     N=shape[1],
                     K=shape[2],
                     time=time_us,
                     diff=diff_prop,
-                    parameters=parameters
+                    negative=has_negative,
+                    parameters=parameters,
                 )
-                results.append(result)
-                saved_count += 1
-                
-                if len(results) == 100 or idx == total_params or recall: 
-                    if results:
-                        self.save_result(results, result_path)
-                        results = []
+                self.save_result(result, result_path)
 
+                # 【更新进度】
+                last_completed_idx = global_idx
+                local_idx += 1
                 pbar.update(1)
                 pbar.set_postfix({
-                    'Processed': idx + 1,
-                    'Value': saved_count
+                    'Processed': local_idx,
+                    'Global Index': global_idx
                 })
-
         return
 
     def gen_data(self, shape: list):
@@ -403,19 +403,11 @@ class GEMMBenchmarkRunner():
         time_us = parse_time(result.stdout.decode('utf-8'))
         return time_us
 
-    def save_result(self, results: list, path: str) -> None:
-        result_dicts = []
-        for result in results:
-            if is_dataclass(result):
-                result_dicts.append(asdict(result))
-            else:
-                result_dicts.append(dict(result))
-        
+    def save_result(self, result: Result, path: str) -> None:
         try:
             with open(path, 'a', encoding='utf-8') as f:
-                for result_dict in result_dicts:
-                    json.dump(result_dict, f, ensure_ascii=False)
-                    f.write('\n')
+                json.dump(asdict(result), f, ensure_ascii=False)
+                f.write('\n')
         except IOError as e:
             print(f"save files error: {e}")
         except Exception as e:
@@ -505,11 +497,10 @@ class GEMMBenchmarkRunner():
 
             print(f'negative info has saved in {jsonl_filename}')
 
-    def run_benchmarks(self, rank_id) -> None:
+    def run_benchmarks(self) -> None:
         print("=====STARTING GEMM BENCHMARK=====")
-        checkpoints = 'checkpoint.json'
         for shape in self.shape_group:
-            self.benchmark_shape(shape, checkpoints, rank_id)
+            self.benchmark_shape(shape)
             
     
     def visualize_time_with_single_parameter(self, shape: list, target_parameter: str, other_parameters: dict) -> None:
@@ -597,10 +588,11 @@ if __name__ == "__main__":
         usage='%(prog)s --rank_id [num] '
     )
     parser.add_argument('--rank_id', required=True, type=int)
+    parser.add_argument('--process_num', required=True, type=int)
     args = parser.parse_args()
     torch.npu.set_device(args.rank_id)
-    benchmark_runner = GEMMBenchmarkRunner(shape_group)
-    benchmark_runner.run_benchmarks(args.rank_id)
+    benchmark_runner = GEMMBenchmarkRunner(shape_group, args.rank_id, args.process_num)
+    benchmark_runner.run_benchmarks()
 
     # shape = [1024, 512, 256]
     # param_dic = {
