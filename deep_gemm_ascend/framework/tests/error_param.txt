@@ -3,3 +3,6 @@ python bench_main.py
 1、算子执行异常
 --m 4000 --n 4000 --k 4000 --m_sections 1 --n_sections 1 --m_sec_o_blocks 2 --n_sec_o_blocks 96 --k_o_iter_blocks 1 --db_o_blocks 1
 CO1越界，CO1大小不能超过128个float类型的BlockCube，即c_buffer_size不能超过128KB
+
+2、算子精度异常
+--m 8 --n 7168 --k 18432 shape下，任意的参数精度都较差，在百万分之1.5的误差下，错误的结果数量大致为千分之3
