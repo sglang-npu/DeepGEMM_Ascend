@@ -7,3 +7,5 @@ export CXX=/usr/local/Ascend/ascend-toolkit/latest/compiler/ccec_compiler/bin/bi
 
 export PYTHONPATH=$DGA_ROOT_DIR/deep_gemm_ascend/framework/build:$PYTHONPATH
 export PYTHONPATH=$DGA_ROOT_DIR/deep_gemm_ascend/framework:$PYTHONPATH
+
+export LD_LIBRARY_PATH=$DGA_ROOT_DIR/deep_gemm_ascend/benchmark_msprof/build/lib:$LD_LIBRARY_PATH
