@@ -42,18 +42,18 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
 
     bool init_zero = true;
 
-    AscendC::GlobalTensor<int> paramGM;
-    paramGM.SetGlobalBuffer((__gm__ int *)params);
+    AscendC::GlobalTensor<uint32_t> paramGM;
+    paramGM.SetGlobalBuffer((__gm__ uint32_t *)params);
 
-    uint32_t m_sections = paramGM.GetValue(0); // 核间切分，m维度切分数量
-    uint32_t n_sections = paramGM.GetValue(1); // 核间切分，n维度切分数量
-    uint32_t m_sec_o_blocks = paramGM.GetValue(2); // 核内切分，m维度每块的大小，单位block
-    uint32_t n_sec_o_blocks = paramGM.GetValue(3); // 核内切分，n维度每块的大小，单位block
-    uint32_t k_o_iter_blocks = paramGM.GetValue(4); // 核内切分，k维度每块的大小，单位block
-    uint32_t db_o_blocks = paramGM.GetValue(5); // 核内切分，double buffer每块的大小，单位block
-    uint32_t m = paramGM.GetValue(6);
-    uint32_t k = paramGM.GetValue(7);
-    uint32_t n = paramGM.GetValue(8);
+    uint32_t m = paramGM.GetValue(0);
+    uint32_t n = paramGM.GetValue(1);
+    uint32_t k = paramGM.GetValue(2);
+    uint32_t m_sections = paramGM.GetValue(3); // 核间切分，m维度切分数量
+    uint32_t n_sections = paramGM.GetValue(4); // 核间切分，n维度切分数量
+    uint32_t m_sec_o_blocks = paramGM.GetValue(5); // 核内切分，m维度每块的大小，单位block
+    uint32_t n_sec_o_blocks = paramGM.GetValue(6); // 核内切分，n维度每块的大小，单位block
+    uint32_t k_o_iter_blocks = paramGM.GetValue(7); // 核内切分，k维度每块的大小，单位block
+    uint32_t db_o_blocks = paramGM.GetValue(8); // 核内切分，double buffer每块的大小，单位block
     uint32_t batch = paramGM.GetValue(9);
     uint32_t k_iters = paramGM.GetValue(10);
     uint32_t m_blocks = paramGM.GetValue(11);
