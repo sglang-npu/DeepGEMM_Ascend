@@ -11,17 +11,22 @@ git branch -vv
 ```
 
 ## 2.prepare environment
-```bash 
+```bash
 # download third library
 bash download.sh
+
+# set home dir to project root path
+source set_env.sh
 ```
 
 ## 3.compile
-```bash 
-# set home dir to project root path
-source set_env.sh
-
+```bash
 # build python api
+cd $DGA_ROOT_DIR/
+bash build.sh
+
+# build benchmark bin
+cd $DGA_ROOT_DIR/deep_gemm_ascend/benchmark_msprof/
 bash build.sh
 ```
 
@@ -31,5 +36,12 @@ bash build.sh
 cd $DGA_ROOT_DIR/deep_gemm_ascend/framework/tests/
 python3 test.py
 
-# ps.we will get wrong result because kernel file is not complete
+# execute python benchmark test
+cd $DGA_ROOT_DIR/deep_gemm_ascend/framework/tests/
+python3 bench_main.py \
+    --m 96 --n 1536 --k 5952  --m_sections 1 --n_sections 1  --m_sec_o_blocks 3 --n_sec_o_blocks 8 --k_o_iter_blocks 20 --db_o_blocks 10
+
+# execute python benchmark
+cd $DGA_ROOT_DIR/deep_gemm_ascend/framework/benchmark/
+bash multi_start.sh benchmark.py 8
 ```

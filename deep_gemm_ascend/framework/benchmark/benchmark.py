@@ -277,6 +277,17 @@ class GEMMBenchmarkRunner():
                 # 检查是否是需要跳过的错误索引
                 if global_idx == last_process_idx:
                     print(f"Rank {self.rank_id} 跳过异常 Tiling组合索引: {global_idx}")
+                    wrong_result = Result(
+                        idx=global_idx,
+                        M=shape[0],
+                        N=shape[1],
+                        K=shape[2],
+                        time=-1,
+                        diff=-1,
+                        negative=True,
+                        parameters=parameters,
+                    )
+                    self.save_result(wrong_result, result_path)
                     local_idx += 1
                     pbar.update(1)
                     continue
