@@ -15,6 +15,6 @@ cmake -B "${BUILD_DIR}" -DSOC_VERSION="Ascend910B3"
 cmake --build "${BUILD_DIR}" -j4
 
 cp "${BUILD_DIR}"/ascendc_kernels_bbit "${BASH_DIR}"
-cp "${BUILD_DIR}"/lib/libascendc_kernels_npu.so "${BASH_DIR}"
-rm -rf "${BUILD_DIR}"
+# cp "${BUILD_DIR}"/lib/libascendc_kernels_npu.so "${BASH_DIR}"
+# rm -rf "${BUILD_DIR}"
 
