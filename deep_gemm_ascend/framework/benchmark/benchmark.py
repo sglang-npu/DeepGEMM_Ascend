@@ -222,7 +222,7 @@ class Result():
         )
 
 class GEMMBenchmarkRunner():
-    def __init__(self, shape_group, rank_id, num_processes, result_dir="./results", msp_dir="./msp", msp_bench_path='../tests/bench_sub.py'):
+    def __init__(self, shape_group, rank_id, num_processes, msp_bench_path, result_dir="./results", msp_dir="./msp"):
         self.shape_group = shape_group
         self.result_dir = result_dir
         self.parameters = Parameter()
@@ -294,11 +294,10 @@ class GEMMBenchmarkRunner():
                 is_diff, diff_prop = self.is_correct(golden, output)
 
                 # 【性能测试】
-                param_str = f" --m {shape[0]} --n {shape[1]} --k {shape[2]} \
-                    --m_sections {parameters['m_sections']} --n_sections {parameters['n_sections']} \
-                    --m_sec_o_blocks {parameters['m_sec_o_blocks']} --n_sec_o_blocks {parameters['n_sec_o_blocks']} \
-                    --k_o_iter_blocks {parameters['k_o_iter_blocks']} --db_o_blocks {parameters['db_o_blocks']} \
-                    --rank_id {self.rank_id}"
+                param_str = f"{self.rank_id} {shape[0]} {shape[1]} {shape[2]} \
+                    {parameters['m_sections']} {parameters['n_sections']} \
+                    {parameters['m_sec_o_blocks']} {parameters['n_sec_o_blocks']} \
+                    {parameters['k_o_iter_blocks']} {parameters['db_o_blocks']}"
                 time_us = self.ms_prof(param_str) if diff_prop < error_tolerance else float('inf')
                 
                 has_negative = torch.any(output < 0).item()
@@ -342,6 +341,11 @@ class GEMMBenchmarkRunner():
 
         x1_gm = heavy_tail([M, K])
         x2_gm = heavy_tail([K, N])
+
+        os.makedirs("input", exist_ok=True)
+        os.makedirs("output", exist_ok=True)
+        x1_gm.tofile("input/x1_gm.bin")
+        x2_gm.tofile("input/x2_gm.bin")
         golden = (np.matmul(x1_gm.astype(np.float32), x2_gm.astype(np.float32))).astype(np.float32)
 
         a_npu = torch.tensor(x1_gm, device=device, dtype=torch.float16)
@@ -384,7 +388,8 @@ class GEMMBenchmarkRunner():
         return error_ratio <= error_tol, error_ratio
 
     def ms_prof(self, param_str) -> float:
-        cmd_str = f"msprof op --output={self.msp_dir} --aic-metrics='PipeUtilization' --kernel-name='mmad' python3 {self.msp_bench_path}"
+        # cmd_str = f"msprof op --output={self.msp_dir} --aic-metrics='PipeUtilization' --kernel-name='mmad' python3 {self.msp_bench_path}"
+        cmd_str = f"msprof op --output={self.msp_dir} --aic-metrics='PipeUtilization' --kernel-name='mmad' {self.msp_bench_path} "
         try:
             # print(f"{cmd_str + param_str}")
             result = subprocess.run(cmd_str + param_str, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -593,7 +598,9 @@ if __name__ == "__main__":
     parser.add_argument('--process_num', required=True, type=int)
     args = parser.parse_args()
     torch.npu.set_device(args.rank_id)
-    benchmark_runner = GEMMBenchmarkRunner(shape_group, args.rank_id, args.process_num)
+    msp_bench_path = "../../benchmark_msprof/ascendc_kernels_bbit"
+    os.makedirs("results", exist_ok=True)
+    benchmark_runner = GEMMBenchmarkRunner(shape_group, args.rank_id, args.process_num, msp_bench_path)
     benchmark_runner.run_benchmarks()
 
     # shape = [1024, 512, 256]
