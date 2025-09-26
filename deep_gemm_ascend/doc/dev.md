@@ -28,6 +28,7 @@ bash build.sh
 # build benchmark bin
 cd $DGA_ROOT_DIR/deep_gemm_ascend/benchmark_msprof/
 bash build.sh
+
 ```
 
 ## 4.runtime
