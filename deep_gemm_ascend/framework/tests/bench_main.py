@@ -164,3 +164,4 @@ def test_bench_dga(args):
 if __name__ == "__main__":
     args = try_parse_args()
     test_bench_dga(args)
+

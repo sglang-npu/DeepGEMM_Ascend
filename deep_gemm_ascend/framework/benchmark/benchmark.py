@@ -15,6 +15,7 @@ import pandas as pd
 import deep_gemm_ascend 
 import subprocess
 import math, argparse, re
+import time
 
 torch.npu.config.allow_internal_format = False
 relative_tol = 1.5e-6
@@ -46,7 +47,7 @@ error_tolerance = 1e-4
 
 class Parameter():
     def __init__(self):
-        self.all_parameters = self.init_generate_parameters()
+        # self.all_parameters = self.init_generate_parameters()
         self.grid_parameters = self.grid_generate_parameters()
 
     def generate_mn_sections(self):
@@ -188,6 +189,9 @@ class Parameter():
         print(f'Filtered parameters count: {len(filtered_params)}')
         return filtered_params
 
+    def get_params_with_idx(self, shape, idx):
+        params = self.filter_parameters(shape)
+        return params[idx]
 
 @dataclass
 class Result():
@@ -261,7 +265,7 @@ class GEMMBenchmarkRunner():
         start_local_idx = 0
         if last_process_idx >= start_idx:
             start_local_idx = last_process_idx - start_idx
-            if start_local_idx >= process_task_count:
+            if start_local_idx + 1 >= process_task_count:
                 print(f"Rank {self.rank_id} 已完成所有任务，无需继续处理")
                 return
         
@@ -279,6 +283,17 @@ class GEMMBenchmarkRunner():
                 # 检查是否是需要跳过的错误索引
                 if global_idx == last_process_idx:
                     print(f"Rank {self.rank_id} 跳过异常 Tiling组合索引: {global_idx}")
+                    wrong_result = Result(
+                    idx=global_idx,
+                    M=shape[0],
+                    N=shape[1],
+                    K=shape[2],
+                    time=-1,
+                    diff=-1,
+                    negative=True,
+                    parameters=parameters,
+                    )
+                    self.save_result(wrong_result, result_path)
                     local_idx += 1
                     pbar.update(1)
                     continue
