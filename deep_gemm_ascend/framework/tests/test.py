@@ -115,10 +115,4 @@ class TestCustomAdd(TestCase):
 
 
 if __name__ == "__main__":
-    acl.init()
-    acl.rt.set_device(3)
-    device, _ = acl.rt.get_device()
-    print(f"now use {device=}")
     run_tests()
-    acl.rt.reset_device(3)
-    acl.finalize()

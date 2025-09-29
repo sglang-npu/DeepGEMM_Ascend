@@ -172,8 +172,6 @@ R"(
 
         AscendC::TQue<AscendC::TPosition::CO1, 1> outQueueCO1;
         pipe.InitBuffer(outQueueCO1, 1, c_buffer_size * sizeof(float));
-        AscendC::LocalTensor<float> c1Local = outQueueCO1.AllocTensor<float>();
-
         AscendC::TQue<AscendC::TPosition::A2, 1> inQueueA2;
         pipe.InitBuffer(inQueueA2, 1, BlockSize(m_sec_o_blocks * db_o_blocks) * sizeof(half));
         AscendC::TQue<AscendC::TPosition::B2, 1> inQueueB2;
@@ -216,6 +214,8 @@ R"(
                 }
 
                 init_zero = true;
+                AscendC::LocalTensor<float> c1Local = outQueueCO1.AllocTensor<float>();
+
                 for (uint32_t ki = 0; ki < k_iters; ki ++)
                 {
                     if (ki == (k_iters - 1))
@@ -350,10 +350,9 @@ R"(
                     cGM[offsetC + mi * BlockLen(m_sec_o_blocks) * n + ni * BlockLen(n_sec_o_blocks)],
                     c1Local,
                     fixpipeParams);
+                outQueueCO1.FreeTensor(c1Local);
             }
         }
-
-        outQueueCO1.FreeTensor(c1Local);
     }
 }
 )";
