@@ -617,7 +617,6 @@ if __name__ == "__main__":
     os.makedirs("results", exist_ok=True)
     benchmark_runner = GEMMBenchmarkRunner(shape_group, args.rank_id, args.process_num, msp_bench_path)
     benchmark_runner.run_benchmarks()
-
     # shape = [1024, 512, 256]
     # param_dic = {
     #     'm_sections': 1,

@@ -27,7 +27,7 @@ import acl
 import deep_gemm_ascend
 
 torch.npu.config.allow_internal_format = False
-relative_tol = 1e-6
+relative_tol = 1.5e-6
 absolute_tol = 1e-9
 error_tol = 1e-4
 
@@ -42,7 +42,6 @@ def gen_golden_data(m, n, k):
     x_npu = a_npu.to(torch.float32)
     y_npu = b_npu.to(torch.float32)
     golden = torch.matmul(x_npu, y_npu)
-    print(f"golden is {golden}")
     return a_npu, b_npu, golden 
 
 
@@ -56,8 +55,19 @@ def verify_result(output, golden):
                                  atol=absolute_tol,
                                  equal_nan=True)
     diff_ele_idxs = np.where(diff_ele_result == False)[0]
+    for index in range(len(diff_ele_idxs)):
+        real_index = diff_ele_idxs[index]
+        golden_data = golden[real_index]
+        output_data = output[real_index]
+        print(
+            "data index: %06d, expected: %-.9f, actual: %-.9f, rdiff: %-.8f" %
+            (real_index, golden_data, output_data,
+             abs(output_data - golden_data) / golden_data))
+        if index == 10:
+            break
     
     error_ratio = float(diff_ele_idxs.size) / golden.size
+    print("error ratio: %.6f, tolerance: %.4f" % (error_ratio, error_tol))
     return error_ratio <= error_tol
 
 

@@ -10,7 +10,6 @@
 
 /**
 usage:
-    export LD_LIBRARY_PATH=$(pwd)/build/lib:$LD_LIBRARY_PATH
     ./ascendc_kernels_bbit [rank_id] [m] [n] [k] [m_sections] [n_sections] [m_sec_o_blocks] [n_sec_o_blocks] [k_o_iter_blocks] [db_o_blocks]
  */
 #include "acl/acl.h"

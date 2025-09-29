@@ -4,6 +4,8 @@ set -e
 BASH_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 BUILD_DIR="${BASH_DIR}"/build
 
+unset CC CXX
+
 if [[ -e "${BUILD_DIR}" ]]; then
     echo "clean cmake cache"
     rm -rf "${BUILD_DIR}"
