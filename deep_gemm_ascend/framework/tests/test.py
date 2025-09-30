@@ -16,7 +16,7 @@ import acl
 import deep_gemm_ascend
 
 torch.npu.config.allow_internal_format = False
-relative_tol = 1e-6
+relative_tol = 2e-4
 absolute_tol = 1e-9
 error_tol = 1e-4
 
@@ -29,7 +29,7 @@ def gen_golden_data():
 
     def heavy_tail(shape):
         v = rng.lognormal(mean=1.0, sigma=1.2, size=shape)
-        return np.clip(v, 1, 10).astype(np.float16)
+        return np.clip(v, 1, 10).astype(np.float32)
     
     x1_gm = heavy_tail([M, K])
     x2_gm = heavy_tail([K, N])
@@ -87,15 +87,24 @@ class TestCustomAdd(TestCase):
         x1_gm, x2_gm, golden = gen_golden_data()
 
         # two ways to expend torch tensor
-        batch = 1
-        x_npu = torch.tensor(x1_gm, device='npu').unsqueeze(0).repeat(batch, 1, 1)
-        y_npu = torch.stack([torch.tensor(x2_gm, device='npu')] * batch, dim=0)
-       
-        length_z = [x_npu.size(1), y_npu.size(2)]
+        batch = 3
+        x_npu = torch.tensor(x1_gm, device='npu', dtype=torch.bfloat16).unsqueeze(0).repeat(batch, 1, 1)
+        y_npu = torch.stack([torch.tensor(x2_gm, device='npu', dtype=torch.bfloat16)] * batch, dim=0)
+
+        length_z = [batch, x_npu.size(1), y_npu.size(2)]
      
         z_npu = torch.zeros(length_z, device='npu', dtype=torch.float32)
         deep_gemm_ascend.run_mmad_rtc(x_npu, y_npu, z_npu)
-        verify_result(z_npu.cpu().numpy(), golden)
+        bmm_out = torch.zeros(length_z, device='npu', dtype=torch.bfloat16)
+        torch.bmm(x_npu, y_npu, out=bmm_out)
+        matmul_out = torch.zeros(length_z, device='npu', dtype=torch.bfloat16)
+        torch.matmul(x_npu, y_npu, out=matmul_out)
+        print("compare znpu to golden")
+        verify_result(z_npu.cpu().numpy(), np.concatenate([golden] * batch, axis=0))
+        print("compare bmm_out to golden")
+        verify_result(bmm_out.to(torch.float32).cpu().numpy(), np.concatenate([golden] * batch, axis=0))
+        print("compare matmul_out to golden")
+        verify_result(matmul_out.to(torch.float32).cpu().numpy(), np.concatenate([golden] * batch, axis=0))
 
     def test_mmad_rtc_ops_2(self):
         return
