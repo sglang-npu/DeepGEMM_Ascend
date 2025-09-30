@@ -123,6 +123,30 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
 
 const std::string FILE_EXEC =
 R"(
+    int a_buffer_size = BlockSize(m_sec_o_blocks * k_o_iter_blocks);
+    int b_buffer_size = BlockSize(n_sec_o_blocks * k_o_iter_blocks);
+    int c_buffer_size = BlockSize(m_sec_o_blocks * n_sec_o_blocks);
+
+    AscendC::GlobalTensor<half> aGM;
+    aGM.SetGlobalBuffer((__gm__ half *)a);
+    AscendC::TQue<AscendC::TPosition::A1, 1> inQueueA1;
+    pipe.InitBuffer(inQueueA1, 2, a_buffer_size * sizeof(half));
+
+    AscendC::GlobalTensor<half> bGM;
+    bGM.SetGlobalBuffer((__gm__ half *)b);
+    AscendC::TQue<AscendC::TPosition::B1, 1> inQueueB1;
+    pipe.InitBuffer(inQueueB1, 2, b_buffer_size * sizeof(half));
+
+    AscendC::GlobalTensor<float> cGM;
+    cGM.SetGlobalBuffer((__gm__ float *)c);
+
+    AscendC::TQue<AscendC::TPosition::CO1, 1> outQueueCO1;
+    pipe.InitBuffer(outQueueCO1, 1, c_buffer_size * sizeof(float));
+    AscendC::TQue<AscendC::TPosition::A2, 1> inQueueA2;
+    pipe.InitBuffer(inQueueA2, 1, BlockSize(m_sec_o_blocks * db_o_blocks) * sizeof(half));
+    AscendC::TQue<AscendC::TPosition::B2, 1> inQueueB2;
+    pipe.InitBuffer(inQueueB2, 1, BlockSize(db_o_blocks * n_sec_o_blocks) * sizeof(half));
+
     for(uint32_t bi = 0; bi < batch; bi++)
     {
         uint32_t offsetA = bi * m * k;
@@ -152,30 +176,6 @@ R"(
         offsetA += mCoreIndx * k * BlockLen(m_sc_blocks);
         offsetB += nCoreIndx * BlockLen(n_sc_blocks);
         offsetC += mCoreIndx * n * BlockLen(m_sc_blocks) + nCoreIndx * BlockLen(n_sc_blocks);
-
-        int a_buffer_size = BlockSize(m_sec_o_blocks * k_o_iter_blocks);
-        int b_buffer_size = BlockSize(n_sec_o_blocks * k_o_iter_blocks);
-        int c_buffer_size = BlockSize(m_sec_o_blocks * n_sec_o_blocks);
-
-        AscendC::GlobalTensor<half> aGM;
-        aGM.SetGlobalBuffer((__gm__ half *)a);
-        AscendC::TQue<AscendC::TPosition::A1, 1> inQueueA1;
-        pipe.InitBuffer(inQueueA1, 2, a_buffer_size * sizeof(half));
-
-        AscendC::GlobalTensor<half> bGM;
-        bGM.SetGlobalBuffer((__gm__ half *)b);
-        AscendC::TQue<AscendC::TPosition::B1, 1> inQueueB1;
-        pipe.InitBuffer(inQueueB1, 2, b_buffer_size * sizeof(half));
-
-        AscendC::GlobalTensor<float> cGM;
-        cGM.SetGlobalBuffer((__gm__ float *)c);
-
-        AscendC::TQue<AscendC::TPosition::CO1, 1> outQueueCO1;
-        pipe.InitBuffer(outQueueCO1, 1, c_buffer_size * sizeof(float));
-        AscendC::TQue<AscendC::TPosition::A2, 1> inQueueA2;
-        pipe.InitBuffer(inQueueA2, 1, BlockSize(m_sec_o_blocks * db_o_blocks) * sizeof(half));
-        AscendC::TQue<AscendC::TPosition::B2, 1> inQueueB2;
-        pipe.InitBuffer(inQueueB2, 1, BlockSize(db_o_blocks * n_sec_o_blocks) * sizeof(half));
 
         AscendC::LocalTensor<half> a1Local, b1Local, a1, b1;
         AscendC::LocalTensor<half> a2Local, b2Local, a2, b2;
