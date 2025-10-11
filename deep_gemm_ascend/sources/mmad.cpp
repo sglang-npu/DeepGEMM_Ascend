@@ -106,8 +106,9 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
         offsetA += mCoreIndx * k * BlockLen(m_sc_blocks);
         offsetB += nCoreIndx * BlockLen(n_sc_blocks);
         offsetC += mCoreIndx * n * BlockLen(m_sc_blocks) + nCoreIndx * BlockLen(n_sc_blocks);
-
+        // m unit 搬运的 a_buffer_size
         int a_buffer_size = BlockSize(m_sec_o_blocks * k_o_iter_blocks);
+        // n unit buffersize
         int b_buffer_size = BlockSize(n_sec_o_blocks * k_o_iter_blocks);
         int c_buffer_size = BlockSize(m_sec_o_blocks * n_sec_o_blocks);
 
