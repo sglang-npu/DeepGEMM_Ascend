@@ -15,6 +15,7 @@ import pandas as pd
 import deep_gemm_ascend 
 import subprocess
 import math, argparse, re
+import time
 
 torch.npu.config.allow_internal_format = False
 relative_tol = 1.5e-6
@@ -23,22 +24,24 @@ error_tol = 1e-4
 
 shape_group = [
     # M、N、K
-    [8, 4096, 7168],
-    # [8, 7168, 18432],
-    # [8, 18432, 7168],
-    # [64, 4096, 7168],
-    # [64, 7168, 18432],
-    # [64, 18432, 7168],
-    # [64, 24576, 1536],
-    # [64, 32768, 512],
-    # [64, 7168, 16384],
-    # [128, 4096, 7168],
-    # [128, 7168, 18432],
-    # [128, 18432, 7168],
-    # [1024, 4096, 7168],
-    # [1024, 18432, 7168],
-    # [2048, 4096, 7168],
-    # [4096, 4096, 7168]
+    [8, 4096, 7168], # 1h 15min   1240
+    [8, 7168, 18432], # 1h 15min   1240
+    [8, 18432, 7168], # 1h 15min   1240
+    [64, 4096, 7168], # 5h  5906
+    [64, 7168, 18432], # 5h  5906
+    [64, 18432, 7168], # 5h  5906
+    [64, 24576, 1536], # 5h  5906
+    [64, 32768, 512], # 5h  5906
+    [64, 7168, 16384], # 5h  5906
+    [128, 4096, 7168], # 9h   9660
+    [128, 7168, 18432], # 9h   9660
+    [128, 18432, 7168], # 9h   9660
+    [1024, 4096, 7168], # 14h   14520
+    [1024, 18432, 7168], # 14h   14520
+    [2048, 4096, 7168], # 14h   14520
+    [1279, 5003, 7681],
+    [3511, 6151, 8191],
+    [5119, 6997, 9901]
 ]
 error_tolerance = 1e-4
 
@@ -186,6 +189,9 @@ class Parameter():
         print(f'Filtered parameters count: {len(filtered_params)}')
         return filtered_params
 
+    def get_params_with_idx(self, shape, idx):
+        params = self.filter_parameters(shape)
+        return params[idx]
 
 @dataclass
 class Result():
@@ -259,7 +265,7 @@ class GEMMBenchmarkRunner():
         start_local_idx = 0
         if last_process_idx >= start_idx:
             start_local_idx = last_process_idx - start_idx
-            if start_local_idx >= process_task_count:
+            if start_local_idx + 1 >= process_task_count:
                 print(f"Rank {self.rank_id} 已完成所有任务，无需继续处理")
                 return
         
@@ -278,14 +284,14 @@ class GEMMBenchmarkRunner():
                 if global_idx == last_process_idx:
                     print(f"Rank {self.rank_id} 跳过异常 Tiling组合索引: {global_idx}")
                     wrong_result = Result(
-                        idx=global_idx,
-                        M=shape[0],
-                        N=shape[1],
-                        K=shape[2],
-                        time=-1,
-                        diff=-1,
-                        negative=True,
-                        parameters=parameters,
+                    idx=global_idx,
+                    M=shape[0],
+                    N=shape[1],
+                    K=shape[2],
+                    time=-1,
+                    diff=-1,
+                    negative=True,
+                    parameters=parameters,
                     )
                     self.save_result(wrong_result, result_path)
                     local_idx += 1
@@ -611,7 +617,6 @@ if __name__ == "__main__":
     os.makedirs("results", exist_ok=True)
     benchmark_runner = GEMMBenchmarkRunner(shape_group, args.rank_id, args.process_num, msp_bench_path)
     benchmark_runner.run_benchmarks()
-
     # shape = [1024, 512, 256]
     # param_dic = {
     #     'm_sections': 1,
