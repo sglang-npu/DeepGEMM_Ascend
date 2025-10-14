@@ -129,7 +129,7 @@ static void mmad_rtc(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
     kernel = runtime->kernel;
 
     CHECK_ACL(aclrtLaunchKernelWithConfig(kernel, blockDim, acl_stream, nullptr, argsHandle, nullptr));
-    CHECK_ACL(aclrtSynchronizeStream(acl_stream));
+    CHECK_ACL(aclrtSynchronizeStream(acl_stream)); // 阻塞应用程序，直到指定 Stream 中的所有任务都完成。
 }
 }
 

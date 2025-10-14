@@ -44,7 +44,7 @@ Config get_best_config(uint32_t batch, uint32_t m, uint32_t n, uint32_t k) {
     args.n_o_fix = align16(n) - n; // 看n轴补了多少
     args.k_o_fix = align16(k) - k; // 看k轴补了多少
 
-    // todo - 有约束 byte 大小。
+    // todo - 有约束 byte 大小，这些block是长方形
     args.m_sec_o_blocks = 3; // m轴上每次搬运 3个block成为被搬运的一组。理想情况下
     args.n_sec_o_blocks = 8; // n轴上每次搬运 （8个block成为被搬运的一组）。完整的block
     args.k_o_iter_blocks = 20; // k轴上每次搬运20个block - （20个block为一组）。
