@@ -467,15 +467,22 @@ R"(
 
                     a1Local = inQueueA1.AllocTensor<bfloat16_t>();
                     a_offset = CalcAOffset(mi, k, m_sec_o_blocks, ki, k_o_iter_blocks);
-                    nd2nzParams.ndNum = 1;
-                    nd2nzParams.nValue = BlockLen(msec_blocks);
-                    nd2nzParams.dValue = BlockLen(k_iter_blocks);
-                    nd2nzParams.srcNdMatrixStride = 0;
-                    nd2nzParams.srcDValue = k;
-                    nd2nzParams.dstNzC0Stride = BlockLen(msec_blocks);
-                    nd2nzParams.dstNzNStride = 1;
-                    nd2nzParams.dstNzMatrixStride = 0;
-                    AscendC::DataCopy(a1Local, aGM[offsetA + a_offset], nd2nzParams);
+                    if (BlockLen(msec_blocks) - m_fix == 1)
+                    {
+                        AscendC::DataCopy(a1Local, aGM[offsetA + a_offset], (BlockLen(msec_blocks) - m_fix) * CeilCubeBlock(k) * CUBE_BLOCK);
+                    }
+                    else
+                    {
+                        nd2nzParams.ndNum = 1;
+                        nd2nzParams.nValue = BlockLen(msec_blocks);
+                        nd2nzParams.dValue = BlockLen(k_iter_blocks);
+                        nd2nzParams.srcNdMatrixStride = 0;
+                        nd2nzParams.srcDValue = k;
+                        nd2nzParams.dstNzC0Stride = BlockLen(msec_blocks);
+                        nd2nzParams.dstNzNStride = 1;
+                        nd2nzParams.dstNzMatrixStride = 0;
+                        AscendC::DataCopy(a1Local, aGM[offsetA + a_offset], nd2nzParams);
+                    }
 
                     b1Local = inQueueB1.AllocTensor<bfloat16_t>();
                     b_offset = CalcBOffset(ni, n, k_o_iter_blocks, ki, n_sec_o_blocks);

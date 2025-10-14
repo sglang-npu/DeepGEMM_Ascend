@@ -16,7 +16,27 @@ namespace deep_gemm_ascend {
 static void mmad_custom(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
 {
     auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
-    uint32_t blockDim = 8;
+    uint32_t blockDim = 1;
+
+    for (int i=0; i < 1; ++i) {
+        for (int j=0; j < 1; ++j){
+            for (int kk=0; k < 32; ++k){
+                std::cout << x[i][j][kk].item<float>() << " ";
+            }
+            std::cout << std::endl;
+        }
+        std::cout << std::endl;
+    }
+    for (int i=0; i < 1; ++i) {
+        for (int j=0; j < 4; ++j){
+            for (int kk=0; k < 32; ++k){
+                std::cout << y[i][j][kk].item<float>() << " ";
+            }
+            std::cout << std::endl;
+        }
+        std::cout << std::endl;
+    }
+    
     ACLRT_LAUNCH_KERNEL(mmad_custom)(
         blockDim,
         acl_stream,

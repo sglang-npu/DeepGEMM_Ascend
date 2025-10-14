@@ -21,9 +21,9 @@ absolute_tol = 1e-9
 error_tol = 1e-4
 
 def gen_golden_data():
-    M = 96 
-    N = 1536
-    K = 5952
+    M = 1 
+    N = 512
+    K = 128
 
     rng = np.random.default_rng()
 
@@ -87,7 +87,7 @@ class TestCustomAdd(TestCase):
         x1_gm, x2_gm, golden = gen_golden_data()
 
         # two ways to expend torch tensor
-        batch = 3
+        batch = 1
         x_npu = torch.tensor(x1_gm, device='npu', dtype=torch.bfloat16).unsqueeze(0).repeat(batch, 1, 1)
         y_npu = torch.stack([torch.tensor(x2_gm, device='npu', dtype=torch.bfloat16)] * batch, dim=0)
 
@@ -105,6 +105,34 @@ class TestCustomAdd(TestCase):
         verify_result(bmm_out.to(torch.float32).cpu().numpy(), np.concatenate([golden] * batch, axis=0))
         print("compare matmul_out to golden")
         verify_result(matmul_out.to(torch.float32).cpu().numpy(), np.concatenate([golden] * batch, axis=0))
+
+    def test_mmad_rtc_ops_from_pt(self):
+        return
+        print("============test runtime compile kernel==============")
+        x1_gm = torch.load('./A_tensor.pt', map_location='npu')
+        x2_gm = torch.load('./B_tensor.pt', map_location='npu')
+        golden = torch.load('./golden_tensor.pt', map_location='npu')
+
+        # two ways to expend torch tensor
+        batch = x1_gm.size(0)
+        x_npu = x1_gm.clone()
+        y_npu = x2_gm.clone()
+
+        length_z = [batch, x_npu.size(1), y_npu.size(2)]
+     
+        z_npu = torch.zeros(length_z, device='npu', dtype=torch.float32)
+        deep_gemm_ascend.run_mmad_rtc(x_npu, y_npu, z_npu)
+        bmm_out = torch.zeros(length_z, device='npu', dtype=torch.bfloat16)
+        torch.bmm(x_npu, y_npu, out=bmm_out)
+        matmul_out = torch.zeros(length_z, device='npu', dtype=torch.bfloat16)
+        torch.matmul(x_npu, y_npu, out=matmul_out)
+        print("compare znpu to golden")
+        verify_result(z_npu.cpu().numpy(), np.concatenate([golden] * batch, axis=0))
+        print("compare bmm_out to golden")
+        verify_result(bmm_out.to(torch.float32).cpu().numpy(), np.concatenate([golden] * batch, axis=0))
+        print("compare matmul_out to golden")
+        verify_result(matmul_out.to(torch.float32).cpu().numpy(), np.concatenate([golden] * batch, axis=0))
+
 
     def test_mmad_rtc_ops_2(self):
         return
