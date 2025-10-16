@@ -122,3 +122,24 @@ def get_best_config(m, n, k, m_sections, n_sections, m_sec_o_blocks, n_sec_o_blo
     param_dic["n"] = n
     param_dic["k"] = k
     print(f"{param_dic=}")
+
+def try_parse_args():
+    parser = argparse.ArgumentParser(
+        usage='%(prog)s --m [num] --n [num] --k [num] \
+            --m_sections [num] --n_sections [num] --m_sec_o_blocks [num] \
+            --n_sec_o_blocks [num] --k_o_iter_blocks [num] --db_o_blocks [num]'
+    )
+    parser.add_argument('--m', required=True, type=int)
+    parser.add_argument("--n", required=True, type=int)
+    parser.add_argument("--k", required=True, type=int)
+    parser.add_argument("--m_sections", required=True, type=int)
+    parser.add_argument("--n_sections", required=True, type=int)
+    parser.add_argument("--m_sec_o_blocks", required=True, type=int)
+    parser.add_argument("--n_sec_o_blocks", required=True, type=int)
+    parser.add_argument("--k_o_iter_blocks", required=True, type=int)
+    parser.add_argument("--db_o_blocks", required=True, type=int)
+
+    if len(sys.argv) == 1:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
+    return parser.parse_args()
