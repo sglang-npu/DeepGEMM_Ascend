@@ -59,7 +59,7 @@ public:
             args.k_o_iter_blocks, args.db_o_blocks,
             args.m_o_fix, args.n_o_fix, args.k_o_fix, args.db_o_num,
             args.m_parts, args.n_parts, args.r_m_parts, args.r_n_parts,
-            args.r_m_blocks, args.r_n_blocks, args.r_k_blocks, args.r_db_num)
+            args.r_m_blocks, args.r_n_blocks, args.r_k_blocks, args.r_db_num);
         code += fmt::format(utils::FILE_EXEC, "bfloat16_t");
         return code;
     }
@@ -100,8 +100,7 @@ static void mmad_rtc(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
         .batch = batch,
         .kernelType = 0,
     };
-    const std::string& kernel_name = "mmad_custom";
-    auto runtime = compiler->build(code, compile_args, kernel_name);
+    auto runtime = compiler->build(code, compile_args);
 
     // 4 launch kernel
     runtime->ConstructArgs(argsHandle, paramHandle, x, y, z);

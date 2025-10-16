@@ -89,8 +89,7 @@ static void mmad_bench(const at::Tensor &x, const at::Tensor &y, at::Tensor &z, 
         .batch = 1,
         .kernelType = 1,
     };
-    const std::string& kernel_name = "mmad_custom";
-    auto runtime = compiler->build(code, compile_args, kernel_name);
+    auto runtime = compiler->build(code, compile_args);
 
     // 4 launch kernel
     KernelHandle kernel = nullptr;

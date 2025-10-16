@@ -23,8 +23,7 @@ public:
 
     virtual ~Compiler() = default;
 
-    std::shared_ptr<KernelRuntime> build(const std::string& code,
-        const CompileArgs& compile_args, const std::string& kernel_name) const 
+    std::shared_ptr<KernelRuntime> build(const std::string& code, const CompileArgs& compile_args) const 
     {
         // 1 get from cache
         const auto kernel_signature = fmt::format("b{}m{}n{}k{}_type{}",
