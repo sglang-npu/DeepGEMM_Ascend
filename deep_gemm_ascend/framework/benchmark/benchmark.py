@@ -248,6 +248,20 @@ class GEMMBenchmarkRunner():
         return out
 
     def is_correct(self, golden, deepgemm_result: Tensor) -> (bool, float):
+        output = deepgemm_result.cpu().numpy()
+
+        output = output.reshape(-1)
+        golden = golden.reshape(-1)
+
+        diff_ele_result = np.isclose(output,
+                                     golden,
+                                     rtol=relative_tol,
+                                     atol=absolute_tol,
+                                     equal_nan=True)
+        diff_ele_idxs = np.where(diff_ele_result == False)[0]
+
+        error_ratio = float(diff_ele_idxs.size) / golden.size
+        return error_ratio <= error_tol, error_ratio
 
     def ms_prof(self, param_str) -> float:
 
