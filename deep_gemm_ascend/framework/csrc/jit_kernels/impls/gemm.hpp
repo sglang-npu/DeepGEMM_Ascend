@@ -97,6 +97,7 @@ static void mmad_rtc(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
     // 3 build code
     const Compiler::CompileArgs& compile_args = {
         .m = m, .n = n, .k = k,
+        .batch = batch,
         .kernelType = 0,
     };
     const std::string& kernel_name = "mmad_custom";
