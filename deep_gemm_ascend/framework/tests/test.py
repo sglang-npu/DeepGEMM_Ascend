@@ -37,3 +37,31 @@ def gen_golden_data():
     golden = (np.matmul(x1_gm.astype(np.float32), x2_gm.astype(np.float32))).astype(np.float32)
     return x1_gm, x2_gm, golden
 
+def verify_result(output, golden):
+    output = output.reshape(-1)
+    golden = golden.reshape(-1)
+
+    diff_ele_result = np.isclose(output,
+                                 golden,
+                                 rtol=relative_tol,
+                                 atol=absolute_tol,
+                                 equal_nan=True)
+    diff_ele_idxs = np.where(diff_ele_result == False)[0]
+    for idx in range(len(diff_ele_idxs)):
+        real_idx = diff_ele_idxs[idx]
+        golden_data = golden[real_idx]
+        output_data = output[real_idx]
+        print(
+            "data index: %06d, excepted: %-.9f， actual: %-.9f，rdiff: %-.6f" % (real_idx, golden_data, output_data,
+            abs(output_data - golden_data) / golden_data)
+        )
+
+        if idx == 10:
+            break
+
+    error_ratio = float(diff_ele_idxs.size) / golden.size
+    print("error ratio: %.4f， tolerance： %.4f" % (error_ratio, error_tol))
+    return error_ratio <= error_tol
+
+
+
