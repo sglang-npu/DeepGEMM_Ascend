@@ -62,6 +62,8 @@ def try_parse_args():
 
 
 
+
+
 if __name__ == "__main__":
     args = try_parse_args()
     torch.npu.set_device(args.rank_id)
