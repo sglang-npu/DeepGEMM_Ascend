@@ -7,60 +7,33 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # ===============================================================================
-
 import torch
+import numpy as np
 import torch_npu
 from torch_npu.testing.testcase import TestCase, run_tests
 import sys, os
-
-sys.path.append(os.getcwd())
-print('lt cur path: ',os.getcwd)
-import deep_gemm_cpp
-println('lt get dga module path', deep_gemm_cpp.__file__)
+import acl
+import deep_gemm_ascend
 
 torch.npu.config.allow_internal_format = False
+relative_tol = 2e-4
+absolute_tol = 1e-9
+error_tol = 1e-4
 
+def gen_golden_data():
+    M = 1
+    N = 512
+    K = 128
 
-class TestCustomAdd(TestCase):
+    rng = np.random.default_rng()
 
-    def test_mmad_custom_ops(self):
-        print("============test api kernel==============")
-        length_x = [96, 5952]
-        length_y = [5952, 1536]
-        length_z = [96, 1536]
-        x = torch.rand(length_x, device='cpu', dtype=torch.float16)
-        y = torch.rand(length_y, device='cpu', dtype=torch.float16)
-        z = torch.empty(length_z, device='cpu', dtype=torch.float16)
+    def heavy_tail(shape):
+        v = rng.lognormal(mean=1.0, sigma=1.2, size=shape)
+        return np.clip(v, 1, 10).astype(np.float32)
 
-        x_npu = x.npu()
-        y_npu = y.npu()
-        z_npu = z.npu()
-        deep_gemm_cpp.run_mmad_custom(x_npu, y_npu, z_npu)
-        cpuout = x.float() @ y.float()
-        print(f"cpu_out: {cpuout=}")
-        print(f"npu_out: {z_npu.float()=}")
+    x1_gm = heavy_tail([M, K])
+    x2_gm = heavy_tail([K, N])
 
-    def test_mmad_cache_ops(self):
-        print("============test cache kernel==============")
-        length_x = [96, 5952]
-        length_y = [5952, 1536]
-        length_z = [96, 1536]
-        x = torch.rand(length_x, device='cpu', dtype=torch.float16)
-        y = torch.rand(length_y, device='cpu', dtype=torch.float16)
-        z = torch.empty(length_z, device='cpu', dtype=torch.float16)
+    golden = (np.matmul(x1_gm.astype(np.float32), x2_gm.astype(np.float32))).astype(np.float32)
+    return x1_gm, x2_gm, golden
 
-        bin_path = os.environ.get("KERNEL_BIN_PATH")
-        print("lt bin path", bin_path)
-        assert bin_path is not None ， "The env of KERNEL_BIN_PATH is not set, please set bin path"
-
-        x_npu = x.npu()
-        y_npu = y.npu()
-        z_npu = z.npu()
-        deep_gemm_cpp.run_mmad_cache(x_npu, y_npu, z_npu, bin_path)
-        cpuout = x.float() @ y.float()
-        print(f"cpu_out: {cpuout=}")
-        print(f"npu_out: {z_npu.float()=}")
-
-
-if __name__ == "__main__":
-    run_tests()
