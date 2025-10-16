@@ -34,3 +34,8 @@ __aicore__ inline uint32_t CalcBOffset(uint32_t ni, uint32_t n, uint32_t ksec_bl
 {
     return (ki * BlockLen(ksec_blocks) * n + ni * BlockLen(nsec_blocks));
 }
+
+extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR c, GM_ADDR params)
+{
+    
+}
