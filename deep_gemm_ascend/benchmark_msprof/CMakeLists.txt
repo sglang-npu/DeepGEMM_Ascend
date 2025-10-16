@@ -43,9 +43,24 @@ target_compile_options(ascendc_kernels_bbit PRIVATE
     -O2 -std=c++17 -D_GLIBCXX_USE_CXX11_ABI=0 -Wall -Werror
 )
 
-# todo link_relative_lib 
+# link_relative_lib 
+target_link_libraries(ascendc_kernels_bbit PRIVATE
+    $<BUILD_INTERFACE:$<$<OR:$<STREQUAL:${RUN_MODE},npu>,$<STREQUAL:${RUN_MODE},sim>>:host_intf_pub>>
+    $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},cpu>:ascendcl>>
+    ascendc_kernels_${RUN_MODE}
+    tiling_api
+    register
+    platform
+    ascendalog
+    dl
+)
 
+# install 
+install(TARGETS ascendc_kernels_bbit
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
 
-# todo install 
 
 
