@@ -25,4 +25,23 @@
         }                                                                                   \
     } while (0);
 
+constexpr uint32_t PARAMS_NUM = 11;
+
+bool String2UInt32(const char *str, uint32_t *result)
+{
+    if (str == nullptr || *str == '\0') {
+        return false;
+    }
+    uint32_t value = 0;
+    const char *ptr = str;
+
+    while (*ptr != '\0') {
+        uint32_t digit = *ptr - '0';
+        value *= 10;
+        value += digit;
+        ptr++;
+    }
+    *result = value;
+    return true;
+}
 
