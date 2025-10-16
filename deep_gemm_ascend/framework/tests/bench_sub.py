@@ -80,9 +80,6 @@ def test_bench_dga(args):
     z_npu = torch.zeros(length_z, device='npu', dtype=torch.float32)
     deep_gemm_ascend.run_mmad_bench(x_npu, y_npu, z_npu, params_npu)
 
-
-
-
 if __name__ == "__main__":
     args = try_parse_args()
     torch.npu.set_device(args.rank_id)
