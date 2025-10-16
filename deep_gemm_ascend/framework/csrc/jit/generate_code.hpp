@@ -502,9 +502,9 @@ R"(
                     a1 = inQueueA1.DeQue<bfloat16_t>();
                     b1 = inQueueB1.DeQue<bfloat16_t>();
 
-                    for (int k = 0; k < db_num; k++)
+                    for (int kii = 0; kii < db_num; kii++)
                     {
-                        if ((ki == (k_iters - 1)) && k == (db_num - 1))
+                        if ((ki == (k_iters - 1)) && kii == (db_num - 1))
                         {
                             db_blocks = r_k_blocks;
                             k_fix = k_o_fix;
@@ -519,7 +519,12 @@ R"(
                         b2Local = inQueueB2.AllocTensor<bfloat16_t>();
 
                         dstOffset = BlockSize(db_blocks);
-                        srcOffset = BlockSize(k * db_o_blocks * (mi == (m_parts - 1) ? msec_blocks : m_sec_o_blocks));
+                        if (BlockLen(msec_blocks) - m_fix == 1){
+                            srcOffset = BlockLen(kii * db_o_blocks);
+                        }
+                        else{
+                            srcOffset = BlockSize(kii * db_o_blocks * (mi == (m_parts - 1) ? msec_blocks : m_sec_o_blocks));
+                        }
 
                         // Nz -> Zz
                         loadDataParams.repeatTimes = db_blocks;
@@ -533,7 +538,7 @@ R"(
                         inQueueA2.EnQue<bfloat16_t>(a2Local);
 
                         dstOffset = BlockSize(nsec_blocks);
-                        srcOffset = BlockSize(k * db_o_blocks);
+                        srcOffset = BlockSize(kii * db_o_blocks);
 
                         // Nz -> Zn
                         loadDataParams.repeatTimes = nsec_blocks;
