@@ -149,6 +149,8 @@ bool WriteFile(const std::string &filePath, const void *buffer, size_t size)
     return true;
 }
 
+#endif // BENCHMARK_UTILS_H
+
 
 
 
