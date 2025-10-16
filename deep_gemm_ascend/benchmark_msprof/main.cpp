@@ -50,9 +50,45 @@ int32_t main(int32_t argc, char *argv[])
     size_t cSize = m * n * sizeof(float);
     uint32_t blockDim = m_sections * n_sections;
 
-    // todo - read left input_tensor 
+    // read left input_tensor 
+    uint8_t *aHost;
+    uint8_t *aDevice;
+    CHECK_ACL(aclrtMallocHost((void **)(&aHost), aSize));
+    CHECK_ACL(aclrtMalloc((void **)&aDevice, aSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    ReadFile("./input/x1_gm.bin", aSize, aHost, aSize);
+    CHECK_ACL(aclrtMemcpy(aDevice, aSize, aHost, aSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    // todo - read right input_tensor
+    // read right input_tensor
+    uint8_t *bHost;
+    uint8_t *bDevice;
+    CHECK_ACL(aclrtMallocHost((void **)(&bHost), bSize));
+    CHECK_ACL(aclrtMalloc((void **)&bDevice, bSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    ReadFile("./input/x2_gm.bin", bSize, bHost, bSize);
+    CHECK_ACL(aclrtMemcpy(bDevice, bSize, bHost, bSize, ACL_MEMCPY_HOST_TO_DEVICE))
 
+    // malloc output_tensor 
+    uint8_t *cHost;
+    uint8_t *cDevice;
+    CHECK_ACL(aclrtMallocHost((void **)(&cHost), cSize));
+    CHECK_ACL(aclrtMalloc((void **)&cDevice, cSize, ACL_MEM_MALLOC_HUGE_FIRST));
+
+    ACLRT_LAUNCH_KERNEL(mmad_custom)(blockDim, stream, aDevice, bDevice, cDevice, pDevice);
+    CHECK_ACL(aclrtSynchronizeStream(stream));
+
+    CHECK_ACL(aclrtMemcpy(cHost, cSize, cDevice, cSize, ACL_MEMCPY_DEVICE_TO_HOST));
+    WriteFile("./output/output.bin", cHost, cSize);
+
+    CHECK_ACL(aclrtFree(pDevice));
+    // CHECK_ACL(aclrtFreeHost(pHost));
+    CHECK_ACL(aclrtFree(aDevice));
+    CHECK_ACL(aclrtFreeHost(aHost));
+    CHECK_ACL(aclrtFree(bDevice));
+    CHECK_ACL(aclrtFreeHost(bHost));
+    CHECK_ACL(aclrtFree(cDevice));
+    CHECK_ACL(aclrtFreeHost(cHost));
+
+    CHECK_ACL(aclrtDestroyStream(stream));
+    CHECK_ACL(aclrtResetDevice(rank_id));
+    CHECK_ACL(aclFinalize());
     return 0
 }
