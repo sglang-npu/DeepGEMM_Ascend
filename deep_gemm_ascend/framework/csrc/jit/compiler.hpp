@@ -13,6 +13,7 @@ class Compiler {
 public:
     struct CompileArgs {
         uint32_t m, n, k;
+        uint32_t batch;
         uint32_t kernelType;
     };
     Compiler() {
@@ -26,8 +27,8 @@ public:
         const CompileArgs& compile_args, const std::string& kernel_name) const 
     {
         // 1 get from cache
-        const auto kernel_signature = fmt::format("m{}n{}k{}_type{}",
-            compile_args.m, compile_args.n, compile_args.k, compile_args.kernelType);
+        const auto kernel_signature = fmt::format("b{}m{}n{}k{}_type{}",
+            compile_args.batch, compile_args.m, compile_args.n, compile_args.k, compile_args.kernelType);
         std::string kernel_dir = fmt::format("{}/deep_gemm_ascend/cache/kernel_{}/", rootPath_, kernel_signature);
         if (const auto& runtime = kernel_runtime_cache->get(kernel_dir); runtime != nullptr) {
             // std::cout << "use kernel cache" << std::endl;

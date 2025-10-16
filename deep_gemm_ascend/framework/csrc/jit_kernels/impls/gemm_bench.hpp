@@ -86,6 +86,7 @@ static void mmad_bench(const at::Tensor &x, const at::Tensor &y, at::Tensor &z, 
     // 3 build code
     const Compiler::CompileArgs& compile_args = {
         .m = 1, .n = 1, .k = 1,
+        .batch = 1,
         .kernelType = 1,
     };
     const std::string& kernel_name = "mmad_custom";
