@@ -27,3 +27,25 @@ else()
 endif()
 include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
 
+# ascendc_library use to add kernel file to generate ascendc library
+ascendc_library(ascendc_kernels_${RUN_MODE} SHARED ${KERNEL_FILES})
+
+ascendc_compile_definitions(ascendc_kernels_${RUN_MODE} PRIVATE
+    $<$<BOOL:$<IN_LIST:${SOC_VERSION},${CUSTOM_ASCEND310P_LIST}>>:CUSTOM_ASCEND310P>
+)
+
+add_executable(ascendc_kernels_bbit
+    ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
+)
+
+target_compile_options(ascendc_kernels_bbit PRIVATE
+    $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},cpu>:-g>>
+    -O2 -std=c++17 -D_GLIBCXX_USE_CXX11_ABI=0 -Wall -Werror
+)
+
+# todo link_relative_lib 
+
+
+# todo install 
+
+
