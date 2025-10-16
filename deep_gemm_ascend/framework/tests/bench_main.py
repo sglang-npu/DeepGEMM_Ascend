@@ -143,3 +143,29 @@ def try_parse_args():
         parser.print_help(sys.stderr)
         sys.exit(1)
     return parser.parse_args()
+
+def test_bench_dga(args):
+    x_npu, y_npu, golden = gen_golden_data(args.m, args.n, args.k)
+
+    # 28 params
+    params_list = [
+        args.m_sections,
+        args.n_sections,
+        args.m_sec_o_blocks,
+        args.n_sec_o_blocks,
+        args.k_o_iter_blocks,
+        args.db_o_blocks,
+    ]
+    params_list.extend([0] * 22)
+    params_npu = torch.tensor(params_list, device='npu', dtype=torch.int32)
+
+    length_z = [x_npu.size(0), y_npu.size(1)]
+
+    z_npu = torch.zeros(length_z, device='npu', dtype=torch.float32)
+    deep_gemm_ascend.run_mmad_bench(x_npu, y_npu, z_npu, params_npu)
+    verify_result(z_npu.cpu().numpy(), golden.cpu().numpy())
+
+if __name__ == "__main__":
+    args = try_parse_args()
+    test_bench_dga(args)
+
