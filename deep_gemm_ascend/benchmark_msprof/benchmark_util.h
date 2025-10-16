@@ -87,4 +87,44 @@ bool ParseInputParams(int32_t argc, char *argv[], std::vector<uint32_t> &param_l
     return true;
 }
 
+bool ReadFile(const std::string &filePath, size_t &fileSize, void *buffer, size_t bufferSize)
+{
+    struct stat sBuf;
+    int fileStatus = stat(filePath.data(), &sBuf);
+    if (fileStatus == -1) {
+        ERROR_LOG("failed to get file");
+        return false;
+    }
+    if (S_ISREG(sBuf.st_mode) == 0) {
+        ERROR_LOG("%s is not a file, please enter a file", filePath.c_str());
+        return false;
+    }
+
+    std::ifstream file;
+    file.open(filePath, std::ios::binary);
+    if (!file.is_open()) {
+        ERROR_LOG("Open file failed. path = %s", filePath.c_str());
+        return false;
+    }
+
+    std::filebuf *buf = file.rdbuf();
+    size_t size = buf->pubseekoff(0, std::ios::end, std::ios::in);
+    if (size == 0) {
+        ERROR_LOG("file size is 0");
+        file.close();
+        return false;
+    }
+    if (size > bufferSize) {
+        ERROR_LOG("file size is larger than buffer size");
+        file.close();
+        return false;
+    }
+    buf->pubseekpos(0, std::ios::in);
+    buf->sgetn(static_cast<char *>(buffer), size);
+    fileSize = size;
+    file.close();
+    return true;
+}
+
+
 
