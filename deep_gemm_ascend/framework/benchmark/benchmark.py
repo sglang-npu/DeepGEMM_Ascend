@@ -17,6 +17,11 @@ import subprocess
 import math, argparse, re
 import time
 
+torch.npu.config.allow_internal_format = False
+relative_tol = 1.5e-6
+absolute_tol = 1e-9
+error_tol = 1e-4
+error_tolerance = 1e-4
 
 shape_group = [
     # M、N、K
@@ -186,6 +191,7 @@ class Parameter():
         params = self.filter_parameters(shape)
         return params[idx]
 
+
 class GEMMBenchmarkRunner():
     def __init__(self, shape_group, rank_id, num_processes, msp_bench_path, result_dir="./results", msp_dir="./msp"):
         self.shape_group = shape_group
@@ -201,6 +207,30 @@ class GEMMBenchmarkRunner():
     def benchmark_shape(self, shape: list) -> None:
 
     def gen_data(self, shape: list):
+        device = torch.device("npu" if torch.npu.is_available() else "cpu")
+        if device.type == "cpu":
+            assert False
+
+        M, N, K = shape
+        rng = np.random.default_rng()
+
+        def heavy_tail(shape):
+            v = rng.lognormal(mean=1.0, sigma=1.2, size=shape)
+            return np.clip(v, 1, 10).astype(np.float16)
+
+        x1_gm = heavy_tail([M, K])
+        x2_gm = heavy_tail([K, N])
+
+        os.makedirs("input", exist_ok=True)
+        os.makedirs("output", exist_ok=True)
+        x1_gm.tofile("input/x1_gm.bin")
+        x2_gm.tofile("input/x2_gm.bin")
+        golden = (np.matmul(x1_gm.astype(np.float32), x2_gm.astype(np.float32))).astype(np.float32)
+
+        a_npu = torch.tensor(x1_gm, device=device, dtype=torch.float16)
+        b_npu = torch.tensor(x2_gm, device=device, dtype=torch.float16)
+
+        return a_npu, b_npu, golden
 
     def deepgemm_gemm(self, a_npu: Tensor, b_npu: Tensor, parameters: dict) -> Tensor:
 
@@ -217,4 +247,16 @@ class GEMMBenchmarkRunner():
     def save_negative_debug_info(self, has_negative:bool, x_npu:Tensor, y_npu:Tensor, z_npu:Tensor):
 
     def run_benchmarks(self) -> None:
-            
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        usage='%(prog)s --rank_id [num] '
+    )
+    parser.add_argument('--rank_id', required=True, type=int)
+    parser.add_argument('--process_num', required=True, type=int)
+    args = parser.parse_args()
+    torch.npu.set_device(args.rank_id)
+    msp_bench_path = "../../benchmark_msprof/ascendc_kernels_bbit"
+    os.makedirs("results", exist_ok=True)
+    benchmark_runner = GEMMBenchmarkRunner(shape_group, args.rank_id, args.process_num, msp_bench_path)
+    benchmark_runner.run_benchmarks()
