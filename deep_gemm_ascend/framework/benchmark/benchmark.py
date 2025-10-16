@@ -185,3 +185,36 @@ class Parameter():
     def get_params_with_idx(self, shape, idx):
         params = self.filter_parameters(shape)
         return params[idx]
+
+class GEMMBenchmarkRunner():
+    def __init__(self, shape_group, rank_id, num_processes, msp_bench_path, result_dir="./results", msp_dir="./msp"):
+        self.shape_group = shape_group
+        self.result_dir = result_dir
+        self.parameters = Parameter()
+        self.parameter_cache = []
+        self.msp_dir = msp_dir
+        self.msp_bench_path = msp_bench_path
+        self.rank_id = rank_id
+        self.num_processes = num_processes
+    
+    # gen_data -> deepgemm_gemm && cann_gemm -> is_correct -> ms_prof -> save_result
+    def benchmark_shape(self, shape: list) -> None:
+
+    def gen_data(self, shape: list):
+
+    def deepgemm_gemm(self, a_npu: Tensor, b_npu: Tensor, parameters: dict) -> Tensor:
+
+    def cann_gemm(self, A: Tensor, B: Tensor) -> Tensor:
+
+    def is_correct(self, golden, deepgemm_result: Tensor) -> (bool, float):
+
+    def ms_prof(self, param_str) -> float:
+
+    def save_result(self, result: Result, path: str) -> None:
+    
+    def save_params_to_jsonl(self, params: list, is_negative: bool, diff: float, jsonl_file_path="./params.jsonl") -> None:
+
+    def save_negative_debug_info(self, has_negative:bool, x_npu:Tensor, y_npu:Tensor, z_npu:Tensor):
+
+    def run_benchmarks(self) -> None:
+            
