@@ -264,6 +264,24 @@ class GEMMBenchmarkRunner():
         return error_ratio <= error_tol, error_ratio
 
     def ms_prof(self, param_str) -> float:
+        cmd_str = f"msprof op --output={self.msp_dir} --aic-metrics='PipeUtilization' --kernel-name='mmad' {self.msp_bench_path} "
+        try:
+            result = subprocess.run(cmd_str + param_str, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except Exception as e:
+            print(f"msprof failed, error is {e}")
+            return 999999999
+        
+        # 从subprocess标准输入流中读取msprof结果
+        def parse_time(result: str):
+            pattern = r'Task Duration\(us\): (\d+\.\d+)'
+            match = re.search(pattern, result)
+            if match:
+                return float(match.group(1))
+            print(f"failed msprof result is {result}")
+            return 999999999
+
+        time_us = parse_time(result.stdout.decode('utf-8'))
+        return time_us
 
     def save_result(self, result: Result, path: str) -> None:
     
