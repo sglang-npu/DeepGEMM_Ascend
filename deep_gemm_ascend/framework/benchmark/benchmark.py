@@ -284,10 +284,98 @@ class GEMMBenchmarkRunner():
         return time_us
 
     def save_result(self, result: Result, path: str) -> None:
+        try:
+            with open(path, 'a', encoding='utf-8') as f:
+                json.dump(asdict(result), f, ensure_ascii=False)
+                f.write('\n')
+        except IOError as e:
+            print(f"save files error: {e}")
+        except Exception as e:
+            print(f"process data error: {e}")
     
     def save_params_to_jsonl(self, params: list, is_negative: bool, diff: float, jsonl_file_path="./params.jsonl") -> None:
+        param_names = {
+            0: "m_sections",
+            1: "n_sections",
+            2: "m_sec_o_blocks",
+            3: "n_sec_o_blocks",
+            4: "k_o_iter_blocks",
+            5: "db_o_blocks",
+            6: "m",
+            7: "k",
+            8: "n",
+            9: "batch",
+            10: "k_iters",
+            11: "m_blocks",
+            12: "n_blocks",
+            13: "k_blocks",
+            14: "m_sc_blocks",
+            15: "n_sc_blocks",
+            16: "m_o_fix",
+            17: "n_o_fix",
+            18: "k_o_fix",
+            19: "db_o_num",
+            20: "m_parts",
+            21: "n_parts",
+            22: "r_m_parts",
+            23: "r_n_parts",
+            24: "r_m_blocks",
+            25: "r_n_blocks",
+            26: "r_k_blocks",
+            27: "r_db_num"
+        }
+        data_dict = {}
+        for i, param in enumerate(params):
+            param_name = param_names.get(i, f"param_{i}")
+            data_dict[param_name] = param.item() if hasattr(param, 'item') else param
+        data_dict["negative"] = is_negative
+        data_dict["diff"] = diff
+
+        self.parameter_cache.append(data_dict)
+
+        if len(self.parameter_cache) >= 100:
+            Path(jsonl_file_path).parent.mkdir(parents=True, exist_ok=True)
+            
+            with jsonlines.open(jsonl_file_path, mode='a') as writer:
+                writer.write_all(self.parameter_cache)
+            
+            self.parameter_cache = []
 
     def save_negative_debug_info(self, has_negative:bool, x_npu:Tensor, y_npu:Tensor, z_npu:Tensor):
+        if has_negative:
+            print(f"exist negative!!")
+
+            negative_indices = torch.where(z_npu < 0)
+            num_negatives = len(negative_indices[0])
+            
+            x_cpu = x_npu.cpu().numpy().tolist()
+            y_cpu = y_npu.cpu().numpy().tolist()
+            z_cpu = z_npu.cpu().numpy().tolist()
+
+            jsonl_filename = "negative_debug_info.jsonl"
+            with open(jsonl_filename, 'a', encoding='utf-8') as f:
+                for idx in range(num_negatives):
+                    i = negative_indices[0][idx].item()
+                    j = negative_indices[1][idx].item()
+                    negative_value = z_npu[i, j].item()
+                    x_slice = x_npu[i, :]
+                    y_slice = y_npu[:, j]
+
+                    debug_info = {
+                        "negative_location": {"row":i, "col":j},
+                        "negative_value": negative_value,
+                        "x_npu_slice_i_row": x_slice.cpu().numpy().tolist(),
+                        "y_npu_slice_j_col": y_slice.cpu().numpy().tolist(),
+                        "params_npu": params_npu,
+                        "x": x_cpu,
+                        "y": y_cpu,
+                        "z": z_npu
+                    }
+            
+                    json_line = json.dumps(debug_info, ensure_ascii=False)
+                    f.write(json_line + '\n')
+
+            print(f'negative info has saved in {jsonl_filename}')
 
     def run_benchmarks(self) -> None:
 
