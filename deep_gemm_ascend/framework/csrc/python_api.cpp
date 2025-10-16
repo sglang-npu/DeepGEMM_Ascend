@@ -2,6 +2,7 @@
 #include <torch/python.h>
 
 #include "jit_kernels/impls/gemm.hpp"
+#include "jit_kernels/impls/gemm_bench.hpp"
 
 #ifndef TORCH_EXTENSION_NAME
 #define TORCH_EXTENSION_NAME deep_gemm_cpp
