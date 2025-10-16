@@ -111,7 +111,7 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
         int a_buffer_size = BlockSize(m_sec_o_blocks * k_o_iter_blocks);
         int b_buffer_size = BlockSize(n_sec_o_blocks * k_o_iter_blocks);
         int c_buffer_size = BlockSize(m_sec_o_blocks * n_sec_o_blocks);
-        
+        /** --------------- 在A1、B1申请的内存 ------------------- */
         AscendC::GlobalTensor<half> aGM;
         aGM.SetGlobalBuffer((__gm__ half *)a);
         AscendC::TQue<AscendC::TPosition::A1, 1> inQueueA1;
@@ -125,8 +125,16 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
         AscendC::GlobalTensor<float> cGM;
         cGM.SetGlobalBuffer((__gm__ float *)c);
 
-
-
+        AscendC::TQue<AscendC::TPosition::CO1, 1> outQueueCO1;
+        pipe.InitBuffer(outQueueCO1, 1, c_buffer_size * sizeof(float)); // 每个A1分配出两块内存，每块大小为c_buffer_size * 4字节（float）
+        
+        /** --------------- 在A2、B2申请的内存 ------------------ */
+        AscendC::TQue<AscendC::TPosition::A2, 1> inQueueA2;
+        pipe.InitBuffer(inQueueA2, 1, BlockSize(m_sec_o_blocks * db_o_blocks) * sizeof(half));
+        AscendC::TQue<AscendC::TPosition::B2, 1> inQueueB2;
+        pipe.InitBuffer(inQueueB2, 1, BlockSize(db_o_blocks * n_sec_o_blocks) * sizeof(half));
+        
+        
 
 
 
