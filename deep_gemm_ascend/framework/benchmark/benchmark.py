@@ -233,8 +233,19 @@ class GEMMBenchmarkRunner():
         return a_npu, b_npu, golden
 
     def deepgemm_gemm(self, a_npu: Tensor, b_npu: Tensor, parameters: dict) -> Tensor:
+        param_list = list(parameters.values())
+        param_list.extend([0] * 22)
+        param_npu = torch.tensor(param_list, device='npu', dtype=torch.int32)
+
+        z_shape = [a_npu.size(0), b_npu.size(1)]
+        z_npu = torch.empty(z_shape, device='npu', dtype=torch.float32)
+
+        deep_gemm_ascend.run_mmad_bench(a_npu, b_npu, z_npu, param_npu)
+        return z_npu, param_npu
 
     def cann_gemm(self, A: Tensor, B: Tensor) -> Tensor:
+        out = A.to('cpu') @ B.to('cpu')
+        return out
 
     def is_correct(self, golden, deepgemm_result: Tensor) -> (bool, float):
 
