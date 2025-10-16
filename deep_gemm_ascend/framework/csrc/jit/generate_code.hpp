@@ -75,21 +75,66 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
     uint32_t r_db_num = {};
 )";
 
-const std::string FILE_BF16_EXEC =
+const std::string FILE_BENCH =
+R"(
+extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR c, GM_ADDR params)
+{
+    KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIC_ONLY);
+    AscendC::TPipe pipe;
+
+    bool init_zero = true;
+
+    AscendC::GlobalTensor<int> paramGM;
+    paramGM.SetGlobalBuffer((__gm__ int *)params);
+
+    uint32_t m_sections = paramGM.GetValue(0);
+    uint32_t n_sections = paramGM.GetValue(1);
+    uint32_t m_sec_o_blocks = paramGM.GetValue(2);
+    uint32_t n_sec_o_blocks = paramGM.GetValue(3);
+    uint32_t k_o_iter_blocks = paramGM.GetValue(4);
+    uint32_t db_o_blocks = paramGM.GetValue(5);
+    uint32_t m = paramGM.GetValue(6);
+    uint32_t n = paramGM.GetValue(7);
+    uint32_t k = paramGM.GetValue(8);
+    uint32_t batch = paramGM.GetValue(9);
+    int k_iters = paramGM.GetValue(10);
+    uint32_t m_blocks = paramGM.GetValue(11);
+    uint32_t n_blocks = paramGM.GetValue(12);
+    uint32_t k_blocks = paramGM.GetValue(13);
+    uint32_t m_sc_blocks = paramGM.GetValue(14);
+    uint32_t n_sc_blocks = paramGM.GetValue(15);
+
+    uint32_t m_o_fix = paramGM.GetValue(16);
+    uint32_t n_o_fix = paramGM.GetValue(17);
+    uint32_t k_o_fix = paramGM.GetValue(18);
+    uint32_t db_o_num = paramGM.GetValue(19);
+
+    uint32_t m_parts = paramGM.GetValue(20);
+    uint32_t n_parts = paramGM.GetValue(21);
+    uint32_t r_m_parts = paramGM.GetValue(22);
+    uint32_t r_n_parts = paramGM.GetValue(23);
+
+    uint32_t r_m_blocks = paramGM.GetValue(24);
+    uint32_t r_n_blocks = paramGM.GetValue(25);
+    uint32_t r_k_blocks = paramGM.GetValue(26);
+    uint32_t r_db_num = paramGM.GetValue(27);
+)";
+
+const std::string FILE_EXEC =
 R"(
     int a_buffer_size = BlockSize(m_sec_o_blocks * k_o_iter_blocks);
     int b_buffer_size = BlockSize(n_sec_o_blocks * k_o_iter_blocks);
     int c_buffer_size = BlockSize(m_sec_o_blocks * n_sec_o_blocks);
 
-    AscendC::GlobalTensor<bfloat16_t> aGM;
-    aGM.SetGlobalBuffer((__gm__ bfloat16_t *)a);
+    AscendC::GlobalTensor<{0}> aGM;
+    aGM.SetGlobalBuffer((__gm__ {0} *)a);
     AscendC::TQue<AscendC::TPosition::A1, 1> inQueueA1;
-    pipe.InitBuffer(inQueueA1, 2, a_buffer_size * sizeof(bfloat16_t));
+    pipe.InitBuffer(inQueueA1, 2, a_buffer_size * sizeof({0}));
 
-    AscendC::GlobalTensor<bfloat16_t> bGM;
-    bGM.SetGlobalBuffer((__gm__ bfloat16_t *)b);
+    AscendC::GlobalTensor<{0}> bGM;
+    bGM.SetGlobalBuffer((__gm__ {0} *)b);
     AscendC::TQue<AscendC::TPosition::B1, 1> inQueueB1;
-    pipe.InitBuffer(inQueueB1, 2, b_buffer_size * sizeof(bfloat16_t));
+    pipe.InitBuffer(inQueueB1, 2, b_buffer_size * sizeof({0}));
 
     AscendC::GlobalTensor<float> cGM;
     cGM.SetGlobalBuffer((__gm__ float *)c);
@@ -97,9 +142,9 @@ R"(
     AscendC::TQue<AscendC::TPosition::CO1, 1> outQueueCO1;
     pipe.InitBuffer(outQueueCO1, 1, c_buffer_size * sizeof(float));
     AscendC::TQue<AscendC::TPosition::A2, 1> inQueueA2;
-    pipe.InitBuffer(inQueueA2, 1, BlockSize(m_sec_o_blocks * db_o_blocks) * sizeof(bfloat16_t));
+    pipe.InitBuffer(inQueueA2, 1, BlockSize(m_sec_o_blocks * db_o_blocks) * sizeof({0}));
     AscendC::TQue<AscendC::TPosition::B2, 1> inQueueB2;
-    pipe.InitBuffer(inQueueB2, 1, BlockSize(db_o_blocks * n_sec_o_blocks) * sizeof(bfloat16_t));
+    pipe.InitBuffer(inQueueB2, 1, BlockSize(db_o_blocks * n_sec_o_blocks) * sizeof({0}));
 
     for(uint32_t bi = 0; bi < batch; bi++)
     {
@@ -131,8 +176,8 @@ R"(
         offsetB += nCoreIndx * BlockLen(n_sc_blocks);
         offsetC += mCoreIndx * n * BlockLen(m_sc_blocks) + nCoreIndx * BlockLen(n_sc_blocks);
 
-        AscendC::LocalTensor<bfloat16_t> a1Local, b1Local, a1, b1;
-        AscendC::LocalTensor<bfloat16_t> a2Local, b2Local, a2, b2;
+        AscendC::LocalTensor<{0}> a1Local, b1Local, a1, b1;
+        AscendC::LocalTensor<{0}> a2Local, b2Local, a2, b2;
 
         AscendC::Nd2NzParams nd2nzParams;
         AscendC::LoadData2DParams loadDataParams;
@@ -183,7 +228,7 @@ R"(
                         db_num = db_o_num;
                     }
 
-                    a1Local = inQueueA1.AllocTensor<bfloat16_t>();
+                    a1Local = inQueueA1.AllocTensor<{0}>();
                     a_offset = CalcAOffset(mi, k, m_sec_o_blocks, ki, k_o_iter_blocks);
                     if (BlockLen(msec_blocks) - m_fix == 1)
                     {
@@ -202,7 +247,7 @@ R"(
                         AscendC::DataCopy(a1Local, aGM[offsetA + a_offset], nd2nzParams);
                     }
 
-                    b1Local = inQueueB1.AllocTensor<bfloat16_t>();
+                    b1Local = inQueueB1.AllocTensor<{0}>();
                     b_offset = CalcBOffset(ni, n, k_o_iter_blocks, ki, n_sec_o_blocks);
                     nd2nzParams.ndNum = 1;
                     nd2nzParams.nValue = BlockLen(k_iter_blocks);
@@ -217,12 +262,12 @@ R"(
                     inQueueA1.EnQue(a1Local);
                     inQueueB1.EnQue(b1Local);
 
-                    a1 = inQueueA1.DeQue<bfloat16_t>();
-                    b1 = inQueueB1.DeQue<bfloat16_t>();
+                    a1 = inQueueA1.DeQue<{0}>();
+                    b1 = inQueueB1.DeQue<{0}>();
 
-                    for (int k = 0; k < db_num; k++)
+                    for (int kii = 0; kii < db_num; kii++)
                     {
-                        if ((ki == (k_iters - 1)) && k == (db_num - 1))
+                        if ((ki == (k_iters - 1)) && kii == (db_num - 1))
                         {
                             db_blocks = r_k_blocks;
                             k_fix = k_o_fix;
@@ -233,11 +278,16 @@ R"(
                             k_fix = 0;
                         }
 
-                        a2Local = inQueueA2.AllocTensor<bfloat16_t>();
-                        b2Local = inQueueB2.AllocTensor<bfloat16_t>();
+                        a2Local = inQueueA2.AllocTensor<{0}>();
+                        b2Local = inQueueB2.AllocTensor<{0}>();
 
                         dstOffset = BlockSize(db_blocks);
-                        srcOffset = BlockSize(k * db_o_blocks * (mi == (m_parts - 1) ? msec_blocks : m_sec_o_blocks));
+                        if (BlockLen(msec_blocks) - m_fix == 1) {
+                            srcOffset = BlockLen(kii * db_o_blocks);
+                        } else {
+                            srcOffset = 
+                                BlockSize(kii * db_o_blocks * (mi == (m_parts - 1) ? msec_blocks : m_sec_o_blocks));
+                        }
 
                         // Nz -> Zz
                         loadDataParams.repeatTimes = db_blocks;
@@ -248,10 +298,10 @@ R"(
                         {
                             AscendC::LoadData(a2Local[j * dstOffset], a1[BlockSize(j) + srcOffset], loadDataParams);
                         }
-                        inQueueA2.EnQue<bfloat16_t>(a2Local);
+                        inQueueA2.EnQue<{0}>(a2Local);
 
                         dstOffset = BlockSize(nsec_blocks);
-                        srcOffset = BlockSize(k * db_o_blocks);
+                        srcOffset = BlockSize(kii * db_o_blocks);
 
                         // Nz -> Zn
                         loadDataParams.repeatTimes = nsec_blocks;
@@ -262,10 +312,10 @@ R"(
                         {
                             AscendC::LoadData(b2Local[j * dstOffset], b1[BlockSize(j) + srcOffset], loadDataParams);
                         }
-                        inQueueB2.EnQue<bfloat16_t>(b2Local);
+                        inQueueB2.EnQue<{0}>(b2Local);
 
-                        a2 = inQueueA2.DeQue<bfloat16_t>();
-                        b2 = inQueueB2.DeQue<bfloat16_t>();
+                        a2 = inQueueA2.DeQue<{0}>();
+                        b2 = inQueueB2.DeQue<{0}>();
 
                         mmadParams.m = BlockLen(msec_blocks) - m_fix;
                         mmadParams.n = BlockLen(nsec_blocks) - n_fix;
