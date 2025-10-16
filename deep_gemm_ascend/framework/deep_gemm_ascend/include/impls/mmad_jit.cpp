@@ -134,7 +134,21 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
         AscendC::TQue<AscendC::TPosition::B2, 1> inQueueB2;
         pipe.InitBuffer(inQueueB2, 1, BlockSize(db_o_blocks * n_sec_o_blocks) * sizeof(half));
         
-        
+        // 新增a1Local、b1Local、a1、b1 tensor
+        AscendC::LocalTensor<half> a1Local, b1Local, a1, b1;
+        AscendC::LocalTensor<half> a2Local, b2Local, a2, b2;
+        // 新增nd2nzParams
+        AscendC::Nd2NzParams nd2nzParams;
+        // 新增loadDataParams
+        AscendC::LoadData2DParams loadDataParams;
+        // 新增 dstOffset、srcOffset
+        uint32_t dstOffset, srcOffset;
+        // 新增 mmadParams
+        AscendC::MmadParams mmadParams;
+        // 新增 fixpipeParams 搬运参数
+        AscendC::FixpipeParamsV220 fixpipeParams;
+
+
 
 
 
