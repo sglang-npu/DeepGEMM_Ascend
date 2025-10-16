@@ -1,12 +1,17 @@
-# Change current directory into project root
-original_dir=$(pwd)
-script_dir=$(realpath "$(dirname "$0")")
-cd "$script_dir"
+#!/bin/bash
+set -e
 
-# Remove old dist file, build files, and install
-rm -rf build dist
-rm -rf *.egg-info
-python setup.py bdist_wheel
+DGA_ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+BUILD_DIR=${DGA_ROOT_DIR}/deep_gemm_ascend/framework/build
 
-# Open users' original directory
-cd "$original_dir"
+cd ${DGA_ROOT_DIR}/deep_gemm_ascend/framework
+
+if [[ -e "${BUILD_DIR}" ]]; then
+    echo "clean cmake cache"
+    rm -rf "${BUILD_DIR}"
+else
+    mkdir -p "${BUILD_DIR}"
+fi
+
+cmake -B ${BUILD_DIR} -DSOC_VERSION="Ascend910B3"
+cmake --build ${BUILD_DIR} -j4
