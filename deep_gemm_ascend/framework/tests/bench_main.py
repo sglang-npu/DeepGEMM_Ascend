@@ -44,3 +44,27 @@ def gen_golden_data(m, n, k):
     golden = torch.matmul(x_npu, y_npu)
     return a_npu, b_npu, golden
 
+def verify_result(output, golden):
+    output = output.reshape(-1)
+    golden = golden.reshape(-1)
+
+    diff_ele_result = np.isclose(output,
+                                 golden,
+                                 rtol=relative_tol,
+                                 atol=absolute_tol,
+                                 equal_nan=True)
+    diff_ele_idxs = np.where(diff_ele_result == False)[0]
+    for index in range(len(diff_ele_idxs)):
+        real_index = diff_ele_idxs[index]
+        golden_data = golden[real_index]
+        output_data = output[real_index]
+        print(
+            "data index: %06d, expected: %-.9f, actual: %-.9f, rdiff: %-.8f" %
+            (real_index, golden_data, output_data,
+             abs(output_data - golden_data) / golden_data))
+        if index == 10:
+            break
+
+    error_ratio = float(diff_ele_idxs.size) / golden.size
+    print("error ratio: %.6f, tolerance: %.4f" % (error_ratio, error_tol))
+    return error_ratio <= error_tol
