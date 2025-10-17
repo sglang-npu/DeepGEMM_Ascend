@@ -91,7 +91,7 @@ Config get_best_config(uint32_t batch, uint32_t m, uint32_t n, uint32_t k) {
     return args;
 }
 
-Config get_bench_config(uint32_t m, uint32_t n, uint32_t k,
+Config get_bench_config(uint32_t batch, uint32_t m, uint32_t n, uint32_t k,
     uint32_t m_sections, uint32_t n_sections,
     uint32_t m_sec_o_blocks, uint32_t n_sec_o_blocks,
     uint32_t k_o_iter_blocks, uint32_t db_o_blocks)
@@ -145,7 +145,7 @@ Config get_bench_config(uint32_t m, uint32_t n, uint32_t k,
     args.r_m_parts = m_iters - ((args.m_sections - 1) * args.m_parts);
     args.r_n_parts = n_iters - ((args.n_sections - 1) * args.n_parts);
 
-    args.batch = 1;
+    args.batch = batch;
     args.m = m;
     args.n = n;
     args.k = k;

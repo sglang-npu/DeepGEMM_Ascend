@@ -77,6 +77,31 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
     uint32_t r_k_blocks = paramGM.GetValue(26);
     uint32_t r_db_num = paramGM.GetValue(27);
 
+    int a_buffer_size = BlockSize(m_sec_o_blocks * k_o_iter_blocks);
+    int b_buffer_size = BlockSize(n_sec_o_blocks * k_o_iter_blocks);
+    int c_buffer_size = BlockSize(m_sec_o_blocks * n_sec_o_blocks);
+
+    AscendC::GlobalTensor<half> aGM;
+    aGM.SetGlobalBuffer((__gm__ half *)a);
+    AscendC::TQue<AscendC::TPosition::A1, 1> inQueueA1;
+    pipe.InitBuffer(inQueueA1, 2, a_buffer_size * sizeof(half)); // 每个A1分配出两块内存，每块大小为a_buffer_size * 2字节（half）
+
+    AscendC::GlobalTensor<half> bGM;
+    bGM.SetGlobalBuffer((__gm__ half *)b);
+    AscendC::TQue<AscendC::TPosition::B1, 1> inQueueB1;
+    pipe.InitBuffer(inQueueB1, 2, b_buffer_size * sizeof(half));
+
+    AscendC::GlobalTensor<float> cGM;
+    cGM.SetGlobalBuffer((__gm__ float *)c);
+
+    AscendC::TQue<AscendC::TPosition::CO1, 1> outQueueCO1;
+    pipe.InitBuffer(outQueueCO1, 1, c_buffer_size * sizeof(float)); // 每个A1分配出两块内存，每块大小为c_buffer_size * 4字节（float）
+
+    AscendC::TQue<AscendC::TPosition::A2, 1> inQueueA2;
+    pipe.InitBuffer(inQueueA2, 1, BlockSize(m_sec_o_blocks * db_o_blocks) * sizeof(half));
+    AscendC::TQue<AscendC::TPosition::B2, 1> inQueueB2;
+    pipe.InitBuffer(inQueueB2, 1, BlockSize(db_o_blocks * n_sec_o_blocks) * sizeof(half));
+
     for(uint32_t bi = 0; bi < batch; bi++)
     {
         uint32_t offsetA = bi * m * k;
@@ -106,31 +131,6 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
         offsetA += mCoreIndx * k * BlockLen(m_sc_blocks);
         offsetB += nCoreIndx * BlockLen(n_sc_blocks);
         offsetC += mCoreIndx * n * BlockLen(m_sc_blocks) + nCoreIndx * BlockLen(n_sc_blocks);
-
-        int a_buffer_size = BlockSize(m_sec_o_blocks * k_o_iter_blocks);
-        int b_buffer_size = BlockSize(n_sec_o_blocks * k_o_iter_blocks);
-        int c_buffer_size = BlockSize(m_sec_o_blocks * n_sec_o_blocks);
-
-        AscendC::GlobalTensor<half> aGM;
-        aGM.SetGlobalBuffer((__gm__ half *)a);
-        AscendC::TQue<AscendC::TPosition::A1, 1> inQueueA1;
-        pipe.InitBuffer(inQueueA1, 2, a_buffer_size * sizeof(half)); // 每个A1分配出两块内存，每块大小为a_buffer_size * 2字节（half）
-
-        AscendC::GlobalTensor<half> bGM;
-        bGM.SetGlobalBuffer((__gm__ half *)b);
-        AscendC::TQue<AscendC::TPosition::B1, 1> inQueueB1;
-        pipe.InitBuffer(inQueueB1, 2, b_buffer_size * sizeof(half));
-
-        AscendC::GlobalTensor<float> cGM;
-        cGM.SetGlobalBuffer((__gm__ float *)c);
-
-        AscendC::TQue<AscendC::TPosition::CO1, 1> outQueueCO1;
-        pipe.InitBuffer(outQueueCO1, 1, c_buffer_size * sizeof(float)); // 每个A1分配出两块内存，每块大小为c_buffer_size * 4字节（float）
-
-        AscendC::TQue<AscendC::TPosition::A2, 1> inQueueA2;
-        pipe.InitBuffer(inQueueA2, 1, BlockSize(m_sec_o_blocks * db_o_blocks) * sizeof(half));
-        AscendC::TQue<AscendC::TPosition::B2, 1> inQueueB2;
-        pipe.InitBuffer(inQueueB2, 1, BlockSize(db_o_blocks * n_sec_o_blocks) * sizeof(half));
 
         AscendC::LocalTensor<half> a1Local, b1Local, a1, b1;
         AscendC::LocalTensor<half> a2Local, b2Local, a2, b2;
@@ -170,6 +170,7 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
 
                 init_zero = true;
                 AscendC::LocalTensor<float> c1Local = outQueueCO1.AllocTensor<float>();
+
                 for (uint32_t ki = 0; ki < k_iters; ki ++)
                 {
                     if (ki == (k_iters - 1))
@@ -185,15 +186,19 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
 
                     a1Local = inQueueA1.AllocTensor<half>();
                     a_offset = CalcAOffset(mi, k, m_sec_o_blocks, ki, k_o_iter_blocks);
-                    nd2nzParams.ndNum = 1; // 每次只需要搬一个矩阵
-                    nd2nzParams.nValue = BlockLen(msec_blocks); // 矩阵大小为nValue * dValue
-                    nd2nzParams.dValue = BlockLen(k_iter_blocks);
-                    nd2nzParams.srcNdMatrixStride = 0; // 只有1个矩阵，不需要偏移
-                    nd2nzParams.srcDValue = k; // 每行偏移为k
-                    nd2nzParams.dstNzC0Stride = BlockLen(msec_blocks); // 转换后，每行为BlockLen(msec_blocks) * CUBE_BLOCK个数据
-                    nd2nzParams.dstNzNStride = 1;
-                    nd2nzParams.dstNzMatrixStride = 0;
-                    AscendC::DataCopy(a1Local, aGM[offsetA + a_offset], nd2nzParams);
+                    if (BlockLen(msec_blocks) - m_fix == 1) {
+                        AscendC::DataCopy(a1Local, aGM[offsetA + a_offset], CeilCubeBlock(k) * CUBE_BLOCK);
+                    } else {
+                        nd2nzParams.ndNum = 1; // 每次只需要搬一个矩阵
+                        nd2nzParams.nValue = BlockLen(msec_blocks); // 矩阵大小为nValue * dValue
+                        nd2nzParams.dValue = BlockLen(k_iter_blocks);
+                        nd2nzParams.srcNdMatrixStride = 0; // 只有1个矩阵，不需要偏移
+                        nd2nzParams.srcDValue = k; // 每行偏移为k
+                        nd2nzParams.dstNzC0Stride = BlockLen(msec_blocks); // 转换后，每行为BlockLen(msec_blocks) * CUBE_BLOCK个数据
+                        nd2nzParams.dstNzNStride = 1;
+                        nd2nzParams.dstNzMatrixStride = 0;
+                        AscendC::DataCopy(a1Local, aGM[offsetA + a_offset], nd2nzParams);
+                    }
 
                     b1Local = inQueueB1.AllocTensor<half>();
                     b_offset = CalcBOffset(ni, n, k_o_iter_blocks, ki, n_sec_o_blocks);
@@ -213,9 +218,9 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
                     a1 = inQueueA1.DeQue<half>();
                     b1 = inQueueB1.DeQue<half>();
 
-                    for (int k = 0; k < db_num; k++)
+                    for (int kii = 0; kii < db_num; kii++)
                     {
-                        if ((ki == (k_iters - 1)) && k == (db_num - 1))
+                        if ((ki == (k_iters - 1)) && kii == (db_num - 1))
                         {
                             db_blocks = r_k_blocks;
                             k_fix = k_o_fix;
@@ -230,7 +235,11 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
                         b2Local = inQueueB2.AllocTensor<half>();
 
                         dstOffset = BlockSize(db_blocks);
-                        srcOffset = BlockSize(k * db_o_blocks * (mi == (m_parts - 1) ? msec_blocks : m_sec_o_blocks));
+                        if (BlockLen(msec_blocks) - m_fix == 1) {
+                            srcOffset = BlockLen(kii * db_o_blocks * msec_blocks);
+                        } else {
+                            srcOffset = BlockSize(kii * db_o_blocks * (mi == (m_parts - 1) ? msec_blocks : m_sec_o_blocks));
+                        }
 
                         // Nz -> Zz
                         loadDataParams.repeatTimes = db_blocks;
@@ -244,7 +253,7 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
                         inQueueA2.EnQue<half>(a2Local);
 
                         dstOffset = BlockSize(nsec_blocks);
-                        srcOffset = BlockSize(k * db_o_blocks);
+                        srcOffset = BlockSize(kii * db_o_blocks);
 
                         // Nz -> Zn
                         loadDataParams.repeatTimes = nsec_blocks;

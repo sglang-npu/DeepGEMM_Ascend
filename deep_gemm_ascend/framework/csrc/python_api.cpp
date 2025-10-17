@@ -11,9 +11,9 @@
 
 namespace deep_gemm_ascend {
 
-void run_mmad_custom(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
+void run_mmad_custom(const at::Tensor &x, const at::Tensor &y, at::Tensor &z, at::Tensor &params)
 {
-    mmad_custom(x, y, z);
+    mmad_custom(x, y, z, params);
 }
 
 void run_mmad_rtc(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)

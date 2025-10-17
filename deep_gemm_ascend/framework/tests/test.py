@@ -64,23 +64,6 @@ def verify_result(output, golden):
     return error_ratio <= error_tol
 
 class TestCustomAdd(TestCase):
-
-    def test_mmad_custom_ops(self):
-        return
-        print("============test api kernel==============")
-        x1_gm, x2_gm, golden = gen_golden_data()
-
-        x_npu = torch.tensor(x1_gm, device='npu')
-        y_npu = torch.tensor(x2_gm, device='npu')
-        
-        length_z = [x_npu.size(0), y_npu.size(1)]
-       
-        z_npu = torch.zeros(length_z, device='npu', dtype=torch.float32)  
-
-        deep_gemm_ascend.run_mmad_custom(x_npu, y_npu, z_npu)
-        
-        verify_result(z_npu.cpu().numpy(), golden)
-
     def test_mmad_rtc_ops(self):
         # return
         print("============test runtime compile kernel==============")
@@ -132,23 +115,6 @@ class TestCustomAdd(TestCase):
         verify_result(bmm_out.to(torch.float32).cpu().numpy(), np.concatenate([golden] * batch, axis=0))
         print("compare matmul_out to golden")
         verify_result(matmul_out.to(torch.float32).cpu().numpy(), np.concatenate([golden] * batch, axis=0))
-
-
-    def test_mmad_rtc_ops_2(self):
-        return
-        print("============test runtime compile kernel again==============")
-        x1_gm, x2_gm, golden = gen_golden_data()
-
-        # two ways to expend torch tensor
-        batch = 1
-        x_npu = torch.tensor(x1_gm, device='npu').unsqueeze(0).repeat(batch, 1, 1)
-        y_npu = torch.stack([torch.tensor(x2_gm, device='npu')] * batch, dim=0)
-     
-        length_z = [x_npu.size(1), y_npu.size(2)]
- 
-        z_npu = torch.zeros(length_z, device='npu', dtype=torch.float32) 
-        deep_gemm_ascend.run_mmad_rtc(x_npu, y_npu, z_npu)
-        verify_result(z_npu.cpu().numpy(), golden)
 
 
 if __name__ == "__main__":

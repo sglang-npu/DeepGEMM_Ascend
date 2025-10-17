@@ -23,14 +23,13 @@ endif()
 include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
 
 set(KERNEL_SRC_PATH
-  "${CMAKE_CURRENT_SOURCE_DIR}/deep_gemm_ascend/include/impls/mmad.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/deep_gemm_ascend/include/impls/mmad_jit.cpp"
   CACHE PATH
   "Path for dynamic mmad kernel file."
 )
 
 # ascendc_library use to add kernel file to generate ascendc library 生成一个静态库.
 ascendc_library(kernels STATIC
-    # deep_gemm_ascend/include/impls/mmad.cpp
     ${KERNEL_SRC_PATH}
 )
 

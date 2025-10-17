@@ -13,36 +13,49 @@
 #include "../../utils/format.hpp"
 
 namespace deep_gemm_ascend {
-static void mmad_custom(const at::Tensor &x, const at::Tensor &y, at::Tensor &z)
+static void mmad_custom(const at::Tensor &x, const at::Tensor &y, at::Tensor &z, at::Tensor params)
 {
-    auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
-    uint32_t blockDim = 1;
+    // 0 check input
+    uint32_t m = params[0].item<int>();
+    uint32_t n = params[1].item<int>();
+    uint32_t k = params[2].item<int>();
+    uint32_t m_sections = params[3].item<int>();
+    uint32_t n_sections = params[4].item<int>();
+    uint32_t m_sec_o_blocks = params[5].item<int>();
+    uint32_t n_sec_o_blocks = params[6].item<int>();
+    uint32_t k_o_iter_blocks = params[7].item<int>();
+    uint32_t db_o_blocks = params[8].item<int>();
 
-    for (int i=0; i < 1; ++i) {
-        for (int j=0; j < 1; ++j){
-            for (int kk=0; k < 32; ++k){
-                std::cout << x[i][j][kk].item<float>() << " ";
-            }
-            std::cout << std::endl;
-        }
-        std::cout << std::endl;
+    // 1 generate args
+    auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+    uint32_t blockDim = m_sections * n_sections;
+    uint32_t batch = x.size(0);
+    const auto& config = get_bench_config(batch, m, n, k,
+        m_sections, n_sections, m_sec_o_blocks, n_sec_o_blocks, k_o_iter_blocks, db_o_blocks);
+
+    std::vector<uint32_t> config_list_ori{config.batch,
+        config.k_iters, config.m_blocks, config.n_blocks, config.k_blocks, config.m_sc_blocks, config.n_sc_blocks,
+        config.m_o_fix, config.n_o_fix, config.k_o_fix, config.db_o_num, config.m_parts, config.n_parts,
+        config.r_m_parts, config.r_n_parts, config.r_m_blocks, config.r_n_blocks, config.r_k_blocks, config.r_db_num};
+
+    std::vector<int> config_list;
+    config_list.reserve(config_list_ori.size());
+    for (auto v : config_list_ori) {
+        config_list.push_back(static_cast<int>(v));
     }
-    for (int i=0; i < 1; ++i) {
-        for (int j=0; j < 4; ++j){
-            for (int kk=0; k < 32; ++k){
-                std::cout << y[i][j][kk].item<float>() << " ";
-            }
-            std::cout << std::endl;
-        }
-        std::cout << std::endl;
-    }
-    
+
+    at::Tensor cpu_tensor = at::from_blob(config_list.data(), {static_cast<int64_t>(config_list.size())}, at::kInt);
+    at::Tensor new_data = cpu_tensor.to(params.device());
+    params.slice(0, 9, 28).copy_(new_data);
+
+    // 2 launch kernel
     ACLRT_LAUNCH_KERNEL(mmad_custom)(
         blockDim,
         acl_stream,
         const_cast<void *>(x.storage().data()),
         const_cast<void *>(y.storage().data()),
-        const_cast<void *>(z.storage().data())
+        const_cast<void *>(z.storage().data()),
+        const_cast<void *>(params.storage().data())
     );
 }
 
