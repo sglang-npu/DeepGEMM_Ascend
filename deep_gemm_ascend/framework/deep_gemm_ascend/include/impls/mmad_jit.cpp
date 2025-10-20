@@ -81,15 +81,15 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
     int b_buffer_size = BlockSize(n_sec_o_blocks * k_o_iter_blocks);
     int c_buffer_size = BlockSize(m_sec_o_blocks * n_sec_o_blocks);
 
-    AscendC::GlobalTensor<half> aGM;
-    aGM.SetGlobalBuffer((__gm__ half *)a);
+    AscendC::GlobalTensor<bfloat16_t> aGM;
+    aGM.SetGlobalBuffer((__gm__ bfloat16_t *)a);
     AscendC::TQue<AscendC::TPosition::A1, 1> inQueueA1;
-    pipe.InitBuffer(inQueueA1, 2, a_buffer_size * sizeof(half)); // 每个A1分配出两块内存，每块大小为a_buffer_size * 2字节（half）
+    pipe.InitBuffer(inQueueA1, 2, a_buffer_size * sizeof(bfloat16_t)); // 每个A1分配出两块内存，每块大小为a_buffer_size * 2字节（half）
 
-    AscendC::GlobalTensor<half> bGM;
-    bGM.SetGlobalBuffer((__gm__ half *)b);
+    AscendC::GlobalTensor<bfloat16_t> bGM;
+    bGM.SetGlobalBuffer((__gm__ bfloat16_t *)b);
     AscendC::TQue<AscendC::TPosition::B1, 1> inQueueB1;
-    pipe.InitBuffer(inQueueB1, 2, b_buffer_size * sizeof(half));
+    pipe.InitBuffer(inQueueB1, 2, b_buffer_size * sizeof(bfloat16_t));
 
     AscendC::GlobalTensor<float> cGM;
     cGM.SetGlobalBuffer((__gm__ float *)c);
@@ -98,9 +98,9 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
     pipe.InitBuffer(outQueueCO1, 1, c_buffer_size * sizeof(float)); // 每个A1分配出两块内存，每块大小为c_buffer_size * 4字节（float）
 
     AscendC::TQue<AscendC::TPosition::A2, 1> inQueueA2;
-    pipe.InitBuffer(inQueueA2, 1, BlockSize(m_sec_o_blocks * db_o_blocks) * sizeof(half));
+    pipe.InitBuffer(inQueueA2, 1, BlockSize(m_sec_o_blocks * db_o_blocks) * sizeof(bfloat16_t));
     AscendC::TQue<AscendC::TPosition::B2, 1> inQueueB2;
-    pipe.InitBuffer(inQueueB2, 1, BlockSize(db_o_blocks * n_sec_o_blocks) * sizeof(half));
+    pipe.InitBuffer(inQueueB2, 1, BlockSize(db_o_blocks * n_sec_o_blocks) * sizeof(bfloat16_t));
 
     for(uint32_t bi = 0; bi < batch; bi++)
     {
@@ -132,8 +132,8 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
         offsetB += nCoreIndx * BlockLen(n_sc_blocks);
         offsetC += mCoreIndx * n * BlockLen(m_sc_blocks) + nCoreIndx * BlockLen(n_sc_blocks);
 
-        AscendC::LocalTensor<half> a1Local, b1Local, a1, b1;
-        AscendC::LocalTensor<half> a2Local, b2Local, a2, b2;
+        AscendC::LocalTensor<bfloat16_t> a1Local, b1Local, a1, b1;
+        AscendC::LocalTensor<bfloat16_t> a2Local, b2Local, a2, b2;
 
         AscendC::Nd2NzParams nd2nzParams;
         AscendC::LoadData2DParams loadDataParams;
@@ -184,7 +184,7 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
                         db_num = db_o_num;
                     }
 
-                    a1Local = inQueueA1.AllocTensor<half>();
+                    a1Local = inQueueA1.AllocTensor<bfloat16_t>();
                     a_offset = CalcAOffset(mi, k, m_sec_o_blocks, ki, k_o_iter_blocks);
                     if (BlockLen(msec_blocks) - m_fix == 1) {
                         AscendC::DataCopy(a1Local, aGM[offsetA + a_offset], CeilCubeBlock(k) * CUBE_BLOCK);
@@ -200,7 +200,7 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
                         AscendC::DataCopy(a1Local, aGM[offsetA + a_offset], nd2nzParams);
                     }
 
-                    b1Local = inQueueB1.AllocTensor<half>();
+                    b1Local = inQueueB1.AllocTensor<bfloat16_t>();
                     b_offset = CalcBOffset(ni, n, k_o_iter_blocks, ki, n_sec_o_blocks);
                     nd2nzParams.ndNum = 1;
                     nd2nzParams.nValue = BlockLen(k_iter_blocks);
@@ -215,8 +215,8 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
                     inQueueA1.EnQue(a1Local);
                     inQueueB1.EnQue(b1Local);
 
-                    a1 = inQueueA1.DeQue<half>();
-                    b1 = inQueueB1.DeQue<half>();
+                    a1 = inQueueA1.DeQue<bfloat16_t>();
+                    b1 = inQueueB1.DeQue<bfloat16_t>();
 
                     for (int kii = 0; kii < db_num; kii++)
                     {
@@ -231,8 +231,8 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
                             k_fix = 0;
                         }
 
-                        a2Local = inQueueA2.AllocTensor<half>();
-                        b2Local = inQueueB2.AllocTensor<half>();
+                        a2Local = inQueueA2.AllocTensor<bfloat16_t>();
+                        b2Local = inQueueB2.AllocTensor<bfloat16_t>();
 
                         dstOffset = BlockSize(db_blocks);
                         if (BlockLen(msec_blocks) - m_fix == 1) {
@@ -250,7 +250,7 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
                         {
                             AscendC::LoadData(a2Local[j * dstOffset], a1[BlockSize(j) + srcOffset], loadDataParams);
                         }
-                        inQueueA2.EnQue<half>(a2Local);
+                        inQueueA2.EnQue<bfloat16_t>(a2Local);
 
                         dstOffset = BlockSize(nsec_blocks);
                         srcOffset = BlockSize(kii * db_o_blocks);
@@ -264,10 +264,10 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
                         {
                             AscendC::LoadData(b2Local[j * dstOffset], b1[BlockSize(j) + srcOffset], loadDataParams);
                         }
-                        inQueueB2.EnQue<half>(b2Local);
+                        inQueueB2.EnQue<bfloat16_t>(b2Local);
 
-                        a2 = inQueueA2.DeQue<half>();
-                        b2 = inQueueB2.DeQue<half>();
+                        a2 = inQueueA2.DeQue<bfloat16_t>();
+                        b2 = inQueueB2.DeQue<bfloat16_t>();
 
                         mmadParams.m = BlockLen(msec_blocks) - m_fix;
                         mmadParams.n = BlockLen(nsec_blocks) - n_fix;

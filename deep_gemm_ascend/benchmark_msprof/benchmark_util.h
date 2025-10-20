@@ -72,7 +72,7 @@ bool ParseInputParams(int32_t argc, char *argv[], std::vector<uint32_t> &param_l
     uint32_t k_o_iter_blocks = params[7];
     uint32_t db_o_blocks = params[8];
 
-    const auto& config = deep_gemm_ascend::get_bench_config(m, n, k,
+    const auto& config = deep_gemm_ascend::get_bench_config(0, m, n, k,
         m_sections, n_sections, m_sec_o_blocks, n_sec_o_blocks, k_o_iter_blocks, db_o_blocks);
 
     std::vector<uint32_t> config_list{
