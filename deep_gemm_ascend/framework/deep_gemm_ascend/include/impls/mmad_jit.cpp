@@ -150,6 +150,7 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
         // 循环遍历m_parts
         for (uint32_t mi = 0; mi < m_parts; mi++)
         {
+            // todo - lt 理解含义
             if (is_last_m && (mi == m_parts - 1))
             {
                 msec_blocks = r_m_blocks;
@@ -160,6 +161,9 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
                 msec_blocks = m_sec_o_blocks;
                 m_fix = 0;
             }
+
+            
+
         }
 
 
