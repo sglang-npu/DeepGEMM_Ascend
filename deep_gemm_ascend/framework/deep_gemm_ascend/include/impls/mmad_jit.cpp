@@ -147,7 +147,20 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
         AscendC::MmadParams mmadParams;
         // 新增 fixpipeParams 搬运参数
         AscendC::FixpipeParamsV220 fixpipeParams;
-
+        // 循环遍历m_parts
+        for (uint32_t mi = 0; mi < m_parts; mi++)
+        {
+            if (is_last_m && (mi == m_parts - 1))
+            {
+                msec_blocks = r_m_blocks;
+                m_fix = m_o_fix;
+            }
+            else
+            {
+                msec_blocks = m_sec_o_blocks;
+                m_fix = 0;
+            }
+        }
 
 
 
