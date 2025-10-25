@@ -44,7 +44,7 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
 
     AscendC::GlobalTensor<uint32_t> paramGM;
     paramGM.SetGlobalBuffer((__gm__ uint32_t *)params);
-    // all the params | 28 
+
     uint32_t m = paramGM.GetValue(0);
     uint32_t n = paramGM.GetValue(1);
     uint32_t k = paramGM.GetValue(2);
@@ -76,8 +76,7 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
     uint32_t r_n_blocks = paramGM.GetValue(25);
     uint32_t r_k_blocks = paramGM.GetValue(26);
     uint32_t r_db_num = paramGM.GetValue(27);
-    
-    // expand the batch loop
+
     for(uint32_t bi = 0; bi < batch; bi++)
     {
         uint32_t offsetA = bi * m * k;
@@ -87,6 +86,7 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
         uint32_t msec_blocks, nsec_blocks, k_iter_blocks, db_blocks;
         uint32_t m_fix, n_fix, k_fix;
         uint32_t db_num;
+
 
         uint32_t blockIdx = AscendC::GetBlockIdx();
         uint32_t mCoreIndx = blockIdx % m_sections;
@@ -106,12 +106,11 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
         offsetA += mCoreIndx * k * BlockLen(m_sc_blocks);
         offsetB += nCoreIndx * BlockLen(n_sc_blocks);
         offsetC += mCoreIndx * n * BlockLen(m_sc_blocks) + nCoreIndx * BlockLen(n_sc_blocks);
-        
-        // 核内每次参与计算的unit 切割大小
+
         int a_buffer_size = BlockSize(m_sec_o_blocks * k_o_iter_blocks);
         int b_buffer_size = BlockSize(n_sec_o_blocks * k_o_iter_blocks);
         int c_buffer_size = BlockSize(m_sec_o_blocks * n_sec_o_blocks);
-        /** --------------- 在A1、B1申请的内存 ------------------- */
+
         AscendC::GlobalTensor<half> aGM;
         aGM.SetGlobalBuffer((__gm__ half *)a);
         AscendC::TQue<AscendC::TPosition::A1, 1> inQueueA1;
@@ -127,30 +126,24 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
 
         AscendC::TQue<AscendC::TPosition::CO1, 1> outQueueCO1;
         pipe.InitBuffer(outQueueCO1, 1, c_buffer_size * sizeof(float)); // 每个A1分配出两块内存，每块大小为c_buffer_size * 4字节（float）
-        
-        /** --------------- 在A2、B2申请的内存 ------------------ */
+
         AscendC::TQue<AscendC::TPosition::A2, 1> inQueueA2;
         pipe.InitBuffer(inQueueA2, 1, BlockSize(m_sec_o_blocks * db_o_blocks) * sizeof(half));
         AscendC::TQue<AscendC::TPosition::B2, 1> inQueueB2;
         pipe.InitBuffer(inQueueB2, 1, BlockSize(db_o_blocks * n_sec_o_blocks) * sizeof(half));
-        
-        // 新增a1Local、b1Local、a1、b1 tensor
+
         AscendC::LocalTensor<half> a1Local, b1Local, a1, b1;
         AscendC::LocalTensor<half> a2Local, b2Local, a2, b2;
-        // 新增nd2nzParams
+
         AscendC::Nd2NzParams nd2nzParams;
-        // 新增loadDataParams
         AscendC::LoadData2DParams loadDataParams;
-        // 新增 dstOffset、srcOffset
+
         uint32_t dstOffset, srcOffset;
-        // 新增 mmadParams
         AscendC::MmadParams mmadParams;
-        // 新增 fixpipeParams 搬运参数
         AscendC::FixpipeParamsV220 fixpipeParams;
-        // 循环遍历m_parts
+
         for (uint32_t mi = 0; mi < m_parts; mi++)
         {
-            // todo - lt 理解含义
             if (is_last_m && (mi == m_parts - 1))
             {
                 msec_blocks = r_m_blocks;
@@ -162,13 +155,157 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
                 m_fix = 0;
             }
 
-            
+            for (uint32_t ni = 0; ni < n_parts; ni++)
+            {
+                if (is_last_n && (ni == n_parts - 1))
+                {
+                    nsec_blocks = r_n_blocks;
+                    n_fix = n_o_fix;
+                }
+                else
+                {
+                    nsec_blocks = n_sec_o_blocks;
+                    n_fix = 0;
+                }
 
+                init_zero = true;
+                AscendC::LocalTensor<float> c1Local = outQueueCO1.AllocTensor<float>();
+                for (uint32_t ki = 0; ki < k_iters; ki ++)
+                {
+                    if (ki == (k_iters - 1))
+                    {
+                        k_iter_blocks = (r_db_num - 1) * db_o_blocks + r_k_blocks;
+                        db_num = r_db_num;
+                    }
+                    else
+                    {
+                        k_iter_blocks = k_o_iter_blocks;
+                        db_num = db_o_num;
+                    }
+
+                    a1Local = inQueueA1.AllocTensor<half>();
+                    a_offset = CalcAOffset(mi, k, m_sec_o_blocks, ki, k_o_iter_blocks);
+                    nd2nzParams.ndNum = 1; // 每次只需要搬一个矩阵
+                    nd2nzParams.nValue = BlockLen(msec_blocks); // 矩阵大小为nValue * dValue
+                    nd2nzParams.dValue = BlockLen(k_iter_blocks);
+                    nd2nzParams.srcNdMatrixStride = 0; // 只有1个矩阵，不需要偏移
+                    nd2nzParams.srcDValue = k; // 每行偏移为k
+                    nd2nzParams.dstNzC0Stride = BlockLen(msec_blocks); // 转换后，每行为BlockLen(msec_blocks) * CUBE_BLOCK个数据
+                    nd2nzParams.dstNzNStride = 1;
+                    nd2nzParams.dstNzMatrixStride = 0;
+                    AscendC::DataCopy(a1Local, aGM[offsetA + a_offset], nd2nzParams);
+
+                    b1Local = inQueueB1.AllocTensor<half>();
+                    b_offset = CalcBOffset(ni, n, k_o_iter_blocks, ki, n_sec_o_blocks);
+                    nd2nzParams.ndNum = 1;
+                    nd2nzParams.nValue = BlockLen(k_iter_blocks);
+                    nd2nzParams.dValue = BlockLen(nsec_blocks);
+                    nd2nzParams.srcNdMatrixStride = 0;
+                    nd2nzParams.srcDValue = n;
+                    nd2nzParams.dstNzC0Stride = BlockLen(k_iter_blocks);
+                    nd2nzParams.dstNzNStride = 1;
+                    nd2nzParams.dstNzMatrixStride = 0;
+                    AscendC::DataCopy(b1Local, bGM[offsetB + b_offset], nd2nzParams);
+
+                    inQueueA1.EnQue(a1Local);
+                    inQueueB1.EnQue(b1Local);
+
+                    a1 = inQueueA1.DeQue<half>();
+                    b1 = inQueueB1.DeQue<half>();
+
+                    for (int k = 0; k < db_num; k++)
+                    {
+                        if ((ki == (k_iters - 1)) && k == (db_num - 1))
+                        {
+                            db_blocks = r_k_blocks;
+                            k_fix = k_o_fix;
+                        }
+                        else
+                        {
+                            db_blocks = db_o_blocks;
+                            k_fix = 0;
+                        }
+
+                        a2Local = inQueueA2.AllocTensor<half>();
+                        b2Local = inQueueB2.AllocTensor<half>();
+
+                        dstOffset = BlockSize(db_blocks);
+                        srcOffset = BlockSize(k * db_o_blocks * (mi == (m_parts - 1) ? msec_blocks : m_sec_o_blocks));
+
+                        // Nz -> Zz
+                        loadDataParams.repeatTimes = db_blocks;
+                        loadDataParams.srcStride = msec_blocks;
+                        loadDataParams.dstGap = 0;
+                        loadDataParams.ifTranspose = false;
+                        for(int j = 0; j < msec_blocks; ++j)
+                        {
+                            AscendC::LoadData(a2Local[j * dstOffset], a1[BlockSize(j) + srcOffset], loadDataParams);
+                        }
+                        inQueueA2.EnQue<half>(a2Local);
+
+                        dstOffset = BlockSize(nsec_blocks);
+                        srcOffset = BlockSize(k * db_o_blocks);
+
+                        // Nz -> Zn
+                        loadDataParams.repeatTimes = nsec_blocks;
+                        loadDataParams.srcStride = k_iter_blocks;
+                        loadDataParams.dstGap = 0;
+                        loadDataParams.ifTranspose = true;
+                        for(int j = 0; j < db_blocks; j++)
+                        {
+                            AscendC::LoadData(b2Local[j * dstOffset], b1[BlockSize(j) + srcOffset], loadDataParams);
+                        }
+                        inQueueB2.EnQue<half>(b2Local);
+
+                        a2 = inQueueA2.DeQue<half>();
+                        b2 = inQueueB2.DeQue<half>();
+
+                        mmadParams.m = BlockLen(msec_blocks) - m_fix;
+                        mmadParams.n = BlockLen(nsec_blocks) - n_fix;
+                        mmadParams.k = BlockLen(db_blocks) - k_fix;
+
+                        if(!init_zero)
+                        {
+                            mmadParams.cmatrixInitVal = false;
+                            mmadParams.cmatrixSource = false;
+                        }
+                        else
+                        {
+                            mmadParams.cmatrixInitVal = true;
+                            mmadParams.cmatrixSource = true;
+                        }
+
+                        AscendC::Mmad(c1Local, a2, b2, mmadParams);
+                        if(init_zero)
+                        {
+                            init_zero = false;
+                        }
+
+                        inQueueA2.FreeTensor(a2);
+                        inQueueB2.FreeTensor(b2);
+                    }
+
+                    inQueueA1.FreeTensor(a1);
+                    inQueueB1.FreeTensor(b1);
+                }
+
+                outQueueCO1.EnQue<float>(c1Local);
+                c1Local = outQueueCO1.DeQue<float>();
+                fixpipeParams.nSize = BlockLen(nsec_blocks) - n_fix;
+                fixpipeParams.mSize = BlockLen(msec_blocks) - m_fix;
+                fixpipeParams.srcStride = BlockLen(msec_blocks);
+                fixpipeParams.dstStride = n;
+
+                fixpipeParams.ndNum = 1;
+                fixpipeParams.srcNdStride = 0;
+                fixpipeParams.dstNdStride = 0;
+
+                AscendC::Fixpipe(
+                    cGM[offsetC + mi * BlockLen(m_sec_o_blocks) * n + ni * BlockLen(n_sec_o_blocks)],
+                    c1Local,
+                    fixpipeParams);
+                outQueueCO1.FreeTensor(c1Local);
+            }
         }
-
-
-
-
     }
-
 }
