@@ -1,5 +1,5 @@
 # dev 
-## 1、pull remote branch
+## 1.pull remote branch
 ```bash
 # pull remote pr & branch 
 git fetch origin
@@ -10,37 +10,39 @@ git checkout origin/sr_1_dga_framework -b sr_1_dga_framework
 git branch -vv
 ```
 
-## 2、compile 
-```bash 
-# set home dir to project root path, exec only once
-export DGA_ROOT_DIR=$(pwd)
+## 2.prepare environment
+```bash
+# download third library
+bash download.sh
 
-# build python api
-cd $DGA_ROOT_DIR/deep_gemm_ascend/framework
-rm -rf build/
-mkdir build
-cmake -B build -DSOC_VERSION="Ascend910B3" \
-    -DKERNEL_SRC_PATH=$DGA_ROOT_DIR/deep_gemm_ascend/framework/deep_gemm_ascend/include/impls/mmad_m_n.cpp
-cmake --build build -j
-
-# build kernel bin
-cd $DGA_ROOT_DIR/deep_gemm_ascend/include/impls
-rm -rf build/ out/
-mkdir build
-cmake -B build -DSOC_VERSION="Ascend910B3" \
-    -DKERNEL_SRC_PATH=$DGA_ROOT_DIR/deep_gemm_ascend/framework/deep_gemm_ascend/include/impls/mmad_m_n.cpp
-cmake --build build -j
+# set home dir to project root path
+source set_env.sh
 ```
 
-## 3、runtime
+## 3.compile
 ```bash
-# set kernel bin path, exec only once
-export KERNEL_BIN_PATH=$(pwd)/out/fatbin/mmad_kernels/mmad_kernels.o
-export PYTHONPATH=$DGA_ROOT_DIR/deep_gemm_ascend/framework/build:$PYTHONPATH
+# build python api
+cd $DGA_ROOT_DIR/
+bash build.sh
 
+# build benchmark bin
+cd $DGA_ROOT_DIR/deep_gemm_ascend/benchmark_msprof/
+bash build.sh
+
+```
+
+## 4.runtime
+```bash
 # execute python test
 cd $DGA_ROOT_DIR/deep_gemm_ascend/framework/tests/
 python3 test.py
 
-# ps.we will get wrong result because kernel file is not complete
+# execute python benchmark test
+cd $DGA_ROOT_DIR/deep_gemm_ascend/framework/tests/
+python3 bench_main.py \
+    --m 96 --n 1536 --k 5952  --m_sections 1 --n_sections 1  --m_sec_o_blocks 3 --n_sec_o_blocks 8 --k_o_iter_blocks 20 --db_o_blocks 10
+
+# execute python benchmark
+cd $DGA_ROOT_DIR/deep_gemm_ascend/framework/benchmark/
+bash multi_start.sh benchmark.py 8
 ```
