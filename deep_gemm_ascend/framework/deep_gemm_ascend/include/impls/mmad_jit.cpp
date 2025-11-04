@@ -1,7 +1,7 @@
 #include "kernel_operator.h"
 
-#define CUBE_BLOCK          16   // block的行列数，单位字节
-#define CUBE_BLOCK_SIZE     256  // block的总大小，单位字节
+#define CUBE_BLOCK          16   // block的行列数，单位元素个数
+#define CUBE_BLOCK_SIZE     256  // block的总大小，单位元素个数
 
 __aicore__ inline uint32_t CeilCubeBlock(uint32_t len)
 {
