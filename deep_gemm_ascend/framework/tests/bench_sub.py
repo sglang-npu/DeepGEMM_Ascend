@@ -76,10 +76,12 @@ def test_bench_dga(args):
     ]
     params_list.extend([0] * 22)
     params_npu = torch.tensor(params_list, device='npu', dtype=torch.int32)
-
+    
+    # shape  [m，n]
     length_z = [x_npu.size(0), y_npu.size(1)]
-
     z_npu = torch.zeros(length_z, device='npu', dtype=torch.float32)
+    
+    # 调用pybind lib run_mmad_bench
     deep_gemm_ascend.run_mmad_bench(x_npu, y_npu, z_npu, params_npu)
 
 
