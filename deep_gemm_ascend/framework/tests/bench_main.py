@@ -35,7 +35,8 @@ def gen_golden_data(batch, m, n, k):
     # 定义目标范围 [a, b)
     min_num = 1.0  # 最小值
     max_num = 10.0  # 最大值
-
+    
+    # 生成区间 [1.0，10.0] 的随机张量
     a_npu = min_num + (max_num - min_num) * torch.rand((batch, m, k), device='npu', dtype=torch.float16)
     b_npu = min_num + (max_num - min_num) * torch.rand((batch, k, n), device='npu', dtype=torch.float16)
 
@@ -48,12 +49,14 @@ def gen_golden_data(batch, m, n, k):
 def verify_result(output, golden):
     output = output.reshape(-1)
     golden = golden.reshape(-1)
-
+    
+    # np.isclose 函数来判断两个数组 output 和 golden 的元素是否在指定的容差范围内 “接近”，并将结果存储在 diff_ele_result 中
     diff_ele_result = np.isclose(output,
                                  golden, 
                                  rtol=relative_tol,
                                  atol=absolute_tol,
                                  equal_nan=True)
+    # 找到元素不一致的坐标集合                             
     diff_ele_idxs = np.where(diff_ele_result == False)[0]
     for index in range(len(diff_ele_idxs)):
         real_index = diff_ele_idxs[index]
