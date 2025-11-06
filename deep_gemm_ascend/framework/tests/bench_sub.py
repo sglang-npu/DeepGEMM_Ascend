@@ -20,7 +20,7 @@
     cann ≥ 8.3.RC1
 """
 import torch
-import numpy as np
+import numpy as np 
 import torch_npu
 import sys, os, math, argparse
 import deep_gemm_ascend
@@ -37,6 +37,7 @@ def gen_golden_data(m, n, k):
     b_npu = min_num + (max_num - min_num) * torch.rand((k, n), device='npu', dtype=torch.float16)
 
     return a_npu, b_npu
+
 
 def try_parse_args():
     parser = argparse.ArgumentParser(
@@ -60,6 +61,7 @@ def try_parse_args():
         sys.exit(1)
     return parser.parse_args()
 
+
 def test_bench_dga(args):
     x_npu, y_npu = gen_golden_data(args.m, args.n, args.k)
 
@@ -74,14 +76,16 @@ def test_bench_dga(args):
     ]
     params_list.extend([0] * 22)
     params_npu = torch.tensor(params_list, device='npu', dtype=torch.int32)
-
+    
+    # shape  [m，n]
     length_z = [x_npu.size(0), y_npu.size(1)]
-
     z_npu = torch.zeros(length_z, device='npu', dtype=torch.float32)
+    
+    # 调用pybind lib run_mmad_bench
     deep_gemm_ascend.run_mmad_bench(x_npu, y_npu, z_npu, params_npu)
+
 
 if __name__ == "__main__":
     args = try_parse_args()
     torch.npu.set_device(args.rank_id)
     test_bench_dga(args)
-
