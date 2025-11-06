@@ -114,7 +114,7 @@ class TestCustomAdd(TestCase):
 
         matmul_out = torch.zeros(length_z, device='npu', dtype=torch.bfloat16)
         torch.matmul(x_npu, y_npu, out=matmul_out)
-        # np.concatenate
+        # np.concatenate [golden] * batch 会创建一个包含 batch 个 golden 数组的列表（例如，若 batch=3，则列表为 [golden, golden, golden]）。
         print("compare znpu to golden")
         verify_result(z_npu.cpu().numpy(), np.concatenate([golden] * batch, axis=0))
 
