@@ -78,10 +78,13 @@ class TestCustomAdd(TestCase):
      
         z_npu = torch.zeros(length_z, device='npu', dtype=torch.float32)
         deep_gemm_ascend.run_mmad_rtc(x_npu, y_npu, z_npu)
+
         bmm_out = torch.zeros(length_z, device='npu', dtype=torch.bfloat16)
         torch.bmm(x_npu, y_npu, out=bmm_out)
+
         matmul_out = torch.zeros(length_z, device='npu', dtype=torch.bfloat16)
         torch.matmul(x_npu, y_npu, out=matmul_out)
+
         print("compare znpu to golden")
         verify_result(z_npu.cpu().numpy(), np.concatenate([golden] * batch, axis=0))
         print("compare bmm_out to golden")
@@ -96,7 +99,7 @@ class TestCustomAdd(TestCase):
         x2_gm = torch.load('./B_tensor.pt', map_location='npu')
         golden = torch.load('./golden_tensor.pt', map_location='npu')
 
-        # two ways to expend torch tensor
+        # 获取shape参数
         batch = x1_gm.size(0)
         x_npu = x1_gm.clone()
         y_npu = x2_gm.clone()
@@ -105,14 +108,19 @@ class TestCustomAdd(TestCase):
      
         z_npu = torch.zeros(length_z, device='npu', dtype=torch.float32)
         deep_gemm_ascend.run_mmad_rtc(x_npu, y_npu, z_npu)
+
         bmm_out = torch.zeros(length_z, device='npu', dtype=torch.bfloat16)
         torch.bmm(x_npu, y_npu, out=bmm_out)
+
         matmul_out = torch.zeros(length_z, device='npu', dtype=torch.bfloat16)
         torch.matmul(x_npu, y_npu, out=matmul_out)
+        # np.concatenate
         print("compare znpu to golden")
         verify_result(z_npu.cpu().numpy(), np.concatenate([golden] * batch, axis=0))
+
         print("compare bmm_out to golden")
         verify_result(bmm_out.to(torch.float32).cpu().numpy(), np.concatenate([golden] * batch, axis=0))
+
         print("compare matmul_out to golden")
         verify_result(matmul_out.to(torch.float32).cpu().numpy(), np.concatenate([golden] * batch, axis=0))
 
