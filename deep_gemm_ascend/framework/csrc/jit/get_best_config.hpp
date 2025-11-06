@@ -7,7 +7,7 @@
 
 namespace deep_gemm_ascend {
 uint32_t align16(uint32_t x) {
-    return (x + 15) & ~15;
+    return (x + 15) & ~15; // 右补齐功能 -> 最接近且不小于x的16的倍数。
 }
 
 struct Config {
@@ -34,9 +34,10 @@ struct Config {
 Config get_best_config(uint32_t batch, uint32_t m, uint32_t n, uint32_t k) {
     Config args;
 
-    // todo 调参
-    args.m_sections = 1;
-    args.n_sections = 1;
+    // 核间切分。
+    args.m_sections = 1; // m矩阵被横切为几份
+    args.n_sections = 1; // n矩阵被横切为几份 
+
     args.m_blocks = align16(m) / 16;
     args.n_blocks = align16(n) / 16;
     args.k_blocks = align16(k) / 16;
