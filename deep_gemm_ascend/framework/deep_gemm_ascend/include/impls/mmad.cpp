@@ -76,6 +76,7 @@ extern "C" __global__ __aicore__ void mmad_custom(GM_ADDR a, GM_ADDR b, GM_ADDR 
 {
     KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIC_ONLY);
     AscendC::TPipe pipe;
+    return;
 
     bool init_zero = true;
     int k_iters = 19;

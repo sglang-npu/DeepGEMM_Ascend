@@ -23,22 +23,26 @@ endif()
 include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
 
 set(KERNEL_SRC_PATH
-  "${CMAKE_CURRENT_SOURCE_DIR}/../mmad.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/deep_gemm_ascend/include/impls/mmad.cpp"
   CACHE PATH
   "Path for dynamic mmad kernel file."
 )
 
 # ascendc_library use to add kernel file to generate ascendc library 生成一个静态库.
-ascendc_library(mmad_kernel STATIC
+ascendc_library(kernels STATIC
     # deep_gemm_ascend/include/impls/mmad.cpp
     ${KERNEL_SRC_PATH}
 )
 
+# 引入fmt三方库
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../third-party/fmt/include)
+
 # 生成 pybind11_lib 静态库
 add_library(pybind11_lib SHARED csrc/python_api.cpp)
+
 # 且私有化链接 mmad_kernel、torch_npu
 target_link_libraries(pybind11_lib PRIVATE
-  mmad_kernel
+  kernels
   torch_npu
 )
 
@@ -78,8 +82,13 @@ string(REPLACE " " ";" PYBIND11_INC ${PYBIND11_INC})
 # pybind11_lib 设置编译选项
 target_compile_options(pybind11_lib PRIVATE
   ${PYBIND11_INC}
-  -D_GLIBCXX_USE_CXX11_ABI=0
+  -D_GLIBCXX_USE_CXX11_ABI=1
 )
+
+# ascendc 算子编译选项
+# ascendc_compile_options(kernels PRIVATE
+#   -g -O0
+# )
 
 execute_process(COMMAND python3-config --extension-suffix
   OUTPUT_STRIP_TRAILING_WHITESPACE
