@@ -3,8 +3,14 @@ import random  # 替换numpy随机，增强多样性
 import pandas as pd
 import argparse
 import time  # 添加时间模块用于统计执行时间
+import sys
+import os
 from deap import base, creator, tools
 from test_om import OMModelInference  # 确保test_om中OMModelInference正常
+
+# 添加父目录到路径，以便导入utils模块
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from utils import MsProfExecutor
 
 # --------------------------
 # 1. 基础配置
@@ -344,12 +350,103 @@ def run_ga(
 
 
 # --------------------------
-# 排名比较函数（与annealer_V2保持一致）
+# ms_prof执行器全局实例
 # --------------------------
-def compare_with_excel(excel_path, best_params):
+_ms_prof_executor = None
+
+
+def init_ms_prof_executor(catlass_bin_path: str, rank_id: int = 0, msp_dir: str = "./msp"):
     """
-    与annealer_V2.py中的compare_with_excel函数保持完全一致
-    计算GA找到的最优参数在Excel中的排名
+    初始化全局ms_prof执行器
+    
+    Args:
+        catlass_bin_path: catlass可执行文件路径
+        rank_id: rank ID，默认为0
+        msp_dir: msprof输出目录，默认为"./msp"
+    """
+    global _ms_prof_executor
+    _ms_prof_executor = MsProfExecutor(
+        catlass_bin_path=catlass_bin_path,
+        rank_id=rank_id,
+        msp_dir=msp_dir
+    )
+    print(f"已初始化ms_prof执行器: catlass_bin_path={catlass_bin_path}, rank_id={rank_id}, msp_dir={msp_dir}")
+
+
+# --------------------------
+# 获取真实执行时间函数（通过ms_prof）
+# --------------------------
+def get_real_execution_time(best_params, m, n, k):
+    """
+    根据最优参数，通过ms_prof获取真实执行耗时
+    
+    Args:
+        best_params: 最优参数（字典格式，包含3个优化参数）
+                    格式：{'m_tile': x, 'n_tile': y, 'k_tile': z}
+        m, n, k: 矩阵维度
+    
+    Returns:
+        real_time: 真实执行耗时（单位：微秒us，需与Excel中time列单位一致）
+                   如果获取失败，返回None
+    """
+    global _ms_prof_executor
+    
+    # 检查ms_prof执行器是否已初始化
+    if _ms_prof_executor is None:
+        print("警告：ms_prof执行器未初始化，请先调用init_ms_prof_executor()")
+        print("示例：init_ms_prof_executor(catlass_bin_path='/path/to/catlass', rank_id=0)")
+        return None
+    
+    # 提取参数值
+    if isinstance(best_params, dict):
+        m_tile = best_params.get('m_tile', 1)
+        n_tile = best_params.get('n_tile', 1)
+        k_tile = best_params.get('k_tile', 1)
+    else:
+        # 如果是列表或元组，按顺序提取
+        if len(best_params) >= 3:
+            m_tile = best_params[2]  # m_tile
+            n_tile = best_params[3]  # n_tile
+            k_tile = best_params[4]  # k_tile
+        else:
+            print(f"错误：参数格式不正确，期望3个参数，实际{len(best_params)}个")
+            return None
+    
+    # 构建参数字符串：格式为 " m n k mTile nTile kTile 0 0 1 rank_id"
+    param_str = f" {m} {n} {k} {m_tile} {n_tile} {k_tile} 0 0 1 {_ms_prof_executor.rank_id}"
+    
+    # 调用ms_prof获取真实执行时间
+    time_us, diff, kernel_func_name, pipe_utilization_data = _ms_prof_executor.ms_prof(param_str)
+    
+    # 处理返回结果
+    if time_us is None:
+        print(f"[get_real_execution_time] 获取真实执行时间失败（超时或异常）")
+        return None
+    elif time_us >= 999999999:
+        print(f"[get_real_execution_time] 获取真实执行时间失败（解析失败或为0）")
+        return None
+    else:
+        print(f"[get_real_execution_time] 成功获取真实执行时间: {time_us:.6f} us (diff={diff:.6f}, kernel={kernel_func_name})")
+        return time_us
+
+
+# --------------------------
+# 排名比较函数（根据真实执行时间）
+# --------------------------
+def compare_with_excel(excel_path, real_execution_time):
+    """
+    根据真实执行耗时在Excel benchmark中查找排名
+    不再通过参数匹配，而是直接用真实执行时间在benchmark中查找排名
+    
+    Args:
+        excel_path: Excel文件路径（包含benchmark数据）
+        real_execution_time: 通过ms_prof收集的真实执行耗时（单位：微秒us或秒s，需与Excel中time列单位一致）
+    
+    Returns:
+        beaten_count: 打败的记录数量
+        total_valid: Excel中有效记录总数
+        beaten_ratio: 打败比例（0.0-1.0）
+        actual_rank: 实际排名（1为最好）
     """
     try:
         df = pd.read_excel(excel_path)
@@ -357,61 +454,28 @@ def compare_with_excel(excel_path, best_params):
         print(f"读取Excel失败：{e}")
         return 0, 0, 0.0, 0
 
-    # 1. 检查Excel是否包含所有必要列（6个参数列+time列）
-    required_cols = OPTIMIZE_PARAMS_NAME + ["time"]
-    missing_cols = [col for col in required_cols if col not in df.columns]
-    if missing_cols:
-        print(f"Excel文件缺少必要列：{missing_cols}")
+    # 1. 检查Excel是否包含time列
+    if "time" not in df.columns:
+        print(f"Excel文件缺少time列")
         return 0, 0, 0.0, 0
 
-    # 2. 转换参数列为int类型（避免Excel数值为float导致匹配失败）
-    for col in OPTIMIZE_PARAMS_NAME:
-        # 先转换为数值，无效值设为NaN
-        df[col] = pd.to_numeric(df[col], errors='coerce')
-        # 只保留正整数，其他设为NaN
-        df[col] = df[col].where((df[col] > 0) & (df[col] == df[col].astype(int)), np.nan)
-        # 转换为整数，NaN保持为NaN
-        df[col] = df[col].astype('Int64')  # 使用可空整数类型
-
-    # 3. 筛选有效数据（时间有效且所有参数列都是正整数）
-    time_valid = df["time"].notna() & df["time"].apply(lambda x: isinstance(x, (int, float)))
-    params_valid = df[OPTIMIZE_PARAMS_NAME].notna().all(axis=1)  # 所有参数列都不为NaN
-    valid_df = df[time_valid & params_valid]
+    # 2. 筛选有效数据（时间有效）
+    time_valid = df["time"].notna() & df["time"].apply(lambda x: isinstance(x, (int, float)) and x >= 0)
+    valid_df = df[time_valid].copy()
     total_valid = len(valid_df)
+    
     if total_valid == 0:
-        print("Excel中无有效数据（时间或参数无效）")
+        print("Excel中无有效时间数据")
         return 0, 0, 0.0, 0
 
-    # 4. 用最优参数匹配Excel中的对应行
-    # 确保best_params中的值都是整数类型
-    # best_params可能是字典或列表，需要统一处理
-    if isinstance(best_params, dict):
-        # 如果已经是字典，直接使用
-        param_dict = {name: int(val) for name, val in best_params.items()}
-    else:
-        # 如果是列表，转换为字典
-        param_dict = {}
-        for name, val in zip(OPTIMIZE_PARAMS_NAME, best_params):
-            param_dict[name] = int(val)  # 强制转换为整数
-    
-    matched_df = valid_df.copy()
-    # 按每个参数列筛选
-    for col, val in param_dict.items():
-        matched_df = matched_df[matched_df[col] == val]
+    # 3. 验证真实执行时间有效性
+    if real_execution_time is None or real_execution_time < 0:
+        print(f"真实执行时间无效：{real_execution_time}")
+        return 0, total_valid, 0.0, total_valid + 1  # 无效时间，排名为最后
 
-    # 5. 处理匹配结果
-    if len(matched_df) == 0:
-        print("未在Excel中找到与最优Tiling参数匹配的记录")
-        return 0, total_valid, 0.0, total_valid + 1  # 无匹配时排名为最后（总有效数+1）
-    
-    # 取第一个匹配行的实际时间（处理可能的重复记录）
-    actual_best_time = matched_df.iloc[0]["time"]
-    if actual_best_time < 0:
-        print("匹配到的记录时间为无效负值")
-        return 0, total_valid, 0.0, total_valid + 1
-
-    # 6. 基于实际时间计算排名和打败比例
-    beaten_count = len(valid_df[valid_df["time"] > actual_best_time])
+    # 4. 基于真实执行时间计算排名和打败比例
+    # 时间越小越好，所以统计有多少条记录的时间 > 真实执行时间
+    beaten_count = len(valid_df[valid_df["time"] > real_execution_time])
     beaten_ratio = beaten_count / total_valid if total_valid > 0 else 0.0
     actual_rank = total_valid - beaten_count + 1  # 排名规则：总数 - 打败数量 + 1
 
@@ -477,8 +541,11 @@ def run_single_shape(shape, args, om_inferencer):
             fixed_k=k
         )
         
-        # 计算排名
-        beaten_count, total_valid, beaten_ratio, actual_rank = compare_with_excel(excel_file_path, best_params)
+        # 获取真实执行时间（通过ms_prof或benchmark）
+        real_execution_time = get_real_execution_time(best_params, m, n, k)
+        
+        # 根据真实执行时间计算排名
+        beaten_count, total_valid, beaten_ratio, actual_rank = compare_with_excel(excel_file_path, real_execution_time)
         
         # 累加统计值
         all_rank += actual_rank
@@ -491,12 +558,16 @@ def run_single_shape(shape, args, om_inferencer):
             'epoch': epoch + 1,
             'rank': actual_rank,
             'beaten_ratio': beaten_ratio,
-            'time': min_time,
-            'execution_time': execution_time,  # 新增：记录执行时间
+            'time': min_time,  # 模型预测时间
+            'real_execution_time': real_execution_time,  # 真实执行时间（ms_prof收集）
+            'execution_time': execution_time,  # 算法执行时间
             'params': best_params
         })
         
-        print(f"第{epoch+1}轮结果: 排名={actual_rank}, 打败比例={beaten_ratio:.4f}, 时间={min_time:.6f}, 执行时间={execution_time:.4f}秒")
+        if real_execution_time is not None:
+            print(f"第{epoch+1}轮结果: 排名={actual_rank}, 打败比例={beaten_ratio:.4f}, 预测时间={min_time:.6f}, 真实执行时间={real_execution_time:.6f}, 算法执行时间={execution_time:.4f}秒")
+        else:
+            print(f"第{epoch+1}轮结果: 排名={actual_rank}, 打败比例={beaten_ratio:.4f}, 预测时间={min_time:.6f}, 真实执行时间=未获取, 算法执行时间={execution_time:.4f}秒")
     
     # 计算该shape的统计结果
     avg_rank = all_rank / args.epochs
@@ -529,6 +600,9 @@ if __name__ == "__main__":
     parser.add_argument('--mutpb', type=float, default=0.1, help='变异概率 (默认: 0.1)')
     parser.add_argument('--epochs', type=int, default=10, help='每个shape运行轮数 (默认: 10)')
     parser.add_argument('--shape', type=str, default="all", help='要测试的shape，格式为M_N_K，或"all"测试所有shape (默认: all)')
+    parser.add_argument('--catlass-bin-path', type=str, default="/home/q30063557/code/cutlass/21_dynamic_tiling_matmul", help='catlass可执行文件路径，如果提供则使用msprof获取真实执行时间')
+    parser.add_argument('--rank-id', type=int, default=1, help='rank ID，用于msprof命令 (默认: 1)')
+    parser.add_argument('--msp-dir', type=str, default="./msp", help='msprof输出目录 (默认: ./msp)')
     args = parser.parse_args()
 
     # 确定要测试的shape列表
@@ -554,6 +628,16 @@ if __name__ == "__main__":
         scaler_path="../best_result/scaler.npz",
         fixed_batch_size=500
     )
+    
+    # 初始化ms_prof执行器（如果提供了catlass_bin_path）
+    if args.catlass_bin_path:
+        init_ms_prof_executor(
+            catlass_bin_path=args.catlass_bin_path,
+            rank_id=args.rank_id,
+            msp_dir=args.msp_dir
+        )
+    else:
+        print("警告：未提供catlass_bin_path，将无法获取真实执行时间，排名计算将使用预测时间")
 
     # 存储所有shape的结果
     all_shape_results = []
