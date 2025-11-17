@@ -2,16 +2,16 @@
 
 # -------------------------- 基础配置 --------------------------
 SCRIPT_PATH="trainer.py"  # 训练脚本路径
-DATA_PATH="processed_data_V2.npz"     # 数据文件路径
+DATA_PATH="merged_excel"     # 数据文件路径
 BASE_OUTPUT_DIR="./exp_results"       # 实验结果根目录
 AVAILABLE_NPUS=(0 1 2 3 4 5 6 7)    # 可用NPU列表
 TOTAL_NPUS=${#AVAILABLE_NPUS[@]}      # 可用NPU数量
 
 # -------------------------- 定义参数空间（通过for循环组合） --------------------------
-LOSSES=("mse" "mae" "smoothl1")                  # 损失函数列表
-OPTIMIZERS=("adam" "sgd" "adamw")                # 优化器列表
-LEARNING_RATES=("0.005" "0.001" "0.01" "0.1")    # 学习率列表
-HIDDEN_DIMS_LIST=("128,64,32" "64,32,16" "256,128" "64,32" ) # 隐藏层维度列表
+LOSSES=("mse" "smoothl1")                  # 损失函数列表
+OPTIMIZERS=("adam" "adamw")                # 优化器列表
+LEARNING_RATES=("0.005" "0.001" "0.01")    # 学习率列表
+HIDDEN_DIMS_LIST=("64,128,64" "32,64,32" "32,128,32" "64,256,64" ) # 隐藏层维度列表
 BATCH_SIZE_LIST=("128" "256" "512" "1024")       # 批次大小列表
 
 # -------------------------- 自动生成实验列表 --------------------------

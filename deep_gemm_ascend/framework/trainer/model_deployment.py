@@ -1,8 +1,8 @@
 import torch
 from trainer import TimePredictMLP
 
-model = TimePredictMLP(input_dim=30, hidden_dims=[128, 64, 32])
-weights_path = './best_result/best_model.pth'
+model = TimePredictMLP(input_dim=13, hidden_dims=[64, 128, 64])
+weights_path = './best_mlp_model.pth'
 
 model.load_state_dict(
     torch.load(
@@ -12,7 +12,7 @@ model.load_state_dict(
 )
 model.eval()
 
-dummy_input = torch.randn(512, 30)
+dummy_input = torch.randn(50, 13)
 onnx_save_path = "./best_model.onnx"
 
 torch.onnx.export(

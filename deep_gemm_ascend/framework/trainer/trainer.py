@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -8,6 +9,9 @@ import os
 import time
 import argparse
 
+torch.random.manual_seed(2025)
+np.random.seed(2025)
+
 # -------------------------- 1. 命令行参数解析函数（仅保留核心参数） --------------------------
 def parse_args():
     parser = argparse.ArgumentParser(description="时间预测模型")
@@ -16,7 +20,7 @@ def parse_args():
     parser.add_argument(
         "--data-path", 
         type=str, 
-        default="processed_data.npz", 
+        default="merged_excel", 
         help="预处理数据文件路径（默认：processed_data.npz）"
     )
     parser.add_argument(
@@ -30,10 +34,16 @@ def parse_args():
     parser.add_argument(
         "--hidden-dims", 
         type=str, 
-        default="64,32,12", 
+        default="64, 128, 64", 
         help="隐藏层维度列表（格式：逗号分隔，如'64,32,16'，默认：64,32,12）"
     )
     
+    parser.add_argument(
+        "--input-dim",
+        type=int,
+        default=13,
+        help="输入维度"
+    )
     # -------------------------- 训练策略参数 --------------------------
     parser.add_argument(
         "--epochs", 
@@ -134,6 +144,218 @@ def get_device(args):
     return device
 
 # -------------------------- 3. 数据类（无修改） --------------------------
+def process_data(args):
+    # 定义文件夹路径
+    folder_path = args.data_path
+
+    # 初始化空列表存储所有数据
+    input_data = []
+    labels = []
+    test_input_data = []
+    test_labels = []
+
+    # 统计文件夹中Excel文件个数
+    file_count = 0
+    try:
+        contents = os.listdir(folder_path)
+        for item in contents:
+            item_path = os.path.join(folder_path, item)
+            if os.path.isfile(item_path):
+                file_count += 1
+        print(f"文件夹 '{folder_path}' 中有 {file_count} 个文件。")
+    except FileNotFoundError:
+        print(f"路径'{folder_path}' 不存在。")
+    except PermissionError:
+        print(f"没有权限访问路径 '{folder_path}' 。")
+
+    count = 0
+    # 遍历文件夹中的所有Excel文件
+    for filename in os.listdir(folder_path):
+        if filename.endswith('.xlsx') or filename.endswith('.xls'):
+            count += 1
+        if count < 0.95 * file_count:
+            file_path = os.path.join(folder_path, filename)
+            # 读取Excel文件
+            df = pd.read_excel(file_path)
+
+            # 提取输入数据和标签数据
+            inputs = df[['M', 'N', 'K', 'mTile', 'nTile', 'kTile']].values
+            # 计算交叉项
+            cross_term = [
+                inputs[:, 0] * inputs[:, 1], # M * N
+                inputs[:, 0] * inputs[:, 0], # M * K
+                inputs[:, 1] * inputs[:, 2], # N * K
+                inputs[:, 3] * inputs[:, 4], # mTile * nTile
+                inputs[:, 3] * inputs[:, 5], # mTile * kTile
+                inputs[:, 4] * inputs[:, 5], # nTile * kTile
+                np.ceil(inputs[:, 1] / inputs[:, 3]) * np.ceil(inputs[:, 2] / inputs[:, 4]), # AI core
+            ]
+
+            # 将交叉项转换为二维数组
+            cross_term_array = np.column_stack(cross_term)
+
+            # 拼接原始输入和交叉项
+            combined_inputs = np.concatenate([inputs, cross_term_array], axis=1)
+
+            # 转换为Pytorch Tensor
+            inputs = torch.tensor(combined_inputs, dtype=torch.float32)
+            target = df['time'].values
+
+            # 将数据添加到列表中
+            input_data.append(inputs)
+            labels.append(target)
+        else:
+            file_path = os.path.join(folder_path, filename)
+            df = pd.read_excel(file_path)
+
+            # 提取输入数据和标签数据
+            inputs = df[['M', 'N', 'K', 'mTile', 'nTile', 'kTile']].values
+            # 计算交叉项
+            cross_term = [
+                inputs[:, 0] * inputs[:, 1], # M * N
+                inputs[:, 0] * inputs[:, 0], # M * K
+                inputs[:, 1] * inputs[:, 2], # N * K
+                inputs[:, 3] * inputs[:, 4], # mTile * nTile
+                inputs[:, 3] * inputs[:, 5], # mTile * kTile
+                inputs[:, 4] * inputs[:, 5], # nTile * kTile
+                np.ceil(inputs[:, 0] / inputs[:, 3]) * np.ceil(inputs[:, 1] / inputs[:, 4]), # AI core
+            ]
+
+            # 将交叉项转换为二维数组
+            cross_term_array = np.column_stack(cross_term)
+
+            # 拼接原始输入和交叉项
+            combined_inputs = np.concatenate([inputs, cross_term_array], axis=1)
+
+            # 转换为Pytorch Tensor
+            inputs = torch.tensor(combined_inputs, dtype=torch.float32)
+            target = df['time'].values
+
+            # 将数据添加到列表中
+            test_input_data.append(inputs)
+            test_labels.append(target)
+
+    # 合并所有数据
+    input_data = np.concatenate(input_data, axis=0)
+    labels = np.concatenate(labels, axis=0)
+    test_input_data = np.concatenate(test_input_data, axis=0)
+    test_labels = np.concatenate(test_labels, axis=0)
+    
+    def filter_invalid_data(input_data, labels):
+        # 剔除异常数据
+        prior_len = len(labels)
+        valid_mask = ~(
+            (labels == 'inf') |
+            (labels == 999999999) |
+            (labels == -1) 
+        )
+        input_data = input_data[valid_mask]
+        labels = labels[valid_mask]
+        print(f"根据自定义异常，筛掉了{prior_len - len(labels)} 条异常数据")
+
+        # 根据3σ原则筛选异常值
+        mean = np.mean(labels)
+        std = np.std(labels)
+        lower_bound = mean - 3 * std
+        upper_bound = mean + 3 * std
+
+        # 找出满足条件的索引
+        prior_len = len(labels)
+        valid_indices = np.where((labels >= lower_bound) & (labels <= upper_bound))[0]
+        invalid_indices1 = np.where((labels < lower_bound))[0]
+        invalid_indices2 = np.where((labels > upper_bound))[0]
+
+        # 筛选数据
+        input_data = input_data[valid_indices]
+        labels = labels[valid_indices]
+
+        # 打印筛掉的数据数量
+        removed_count = prior_len - len(valid_indices)
+        print(f'根据3σ原则, 筛掉了 {removed_count}条异常数据，共{len(invalid_indices1)}条低于下界的数据， {len(invalid_indices2)}条高于上界的数据')
+        print(f'保留了{len(labels)}条数据')
+
+        return input_data, labels
+
+    input_data, labels = filter_invalid_data(input_data, labels)
+    test_input_data, test_labels = filter_invalid_data(test_input_data, test_labels)
+
+    # 划分数据集
+    train_size = int(0.7 * len(input_data))
+    val_size = int(0.2 * len(input_data))
+    test_size = len(input_data) - train_size - val_size
+
+    print(f"数据范围: min={labels.min():.4f} us, max={labels.max():.4f} us, mean={labels.mean():.4f} us")
+    print(f"时间跨度比例 (max/min): {labels.max()/labels.min():.2f} 倍")
+
+    # 随机打乱数据
+    indices = np.random.permutation(len(input_data))
+    input_data = input_data[indices]
+    labels = labels[indices]
+
+    # 划分训练集、验证集和测试集
+    X_train = input_data[:train_size]
+    y_train = labels[:train_size]
+    X_val = input_data[train_size:train_size + val_size]
+    y_val = labels[train_size:train_size + val_size]
+    # 见过shape但没见过tiling的测试集
+    X_test = input_data[train_size + val_size:]
+    y_test = labels[train_size + val_size:]
+    # 添加未见过shape数据到测试集上（混合模式）
+    X_test_mix = np.concatenate((X_test, test_input_data), axis=0)
+    y_test_mix = np.concatenate((y_test, test_labels), axis=0)
+
+    # 转换为Pytorch张量
+    X_train = torch.FloatTensor(X_train)
+    y_train = torch.FloatTensor(y_train).view(-1,1)
+    X_val = torch.FloatTensor(X_val)
+    y_val = torch.FloatTensor(y_val).view(-1,1)
+    X_test = torch.FloatTensor(X_test)
+    y_test = torch.FloatTensor(y_test).view(-1,1)
+    X_test_mix = torch.FloatTensor(X_test_mix)
+    y_test_mix = torch.FloatTensor(y_test_mix).view(-1,1)
+
+    # 创建数据集
+    train_dataset = TimeDataset(
+        X_train, y_train,
+        log_transform=False
+    )
+    # 保存特征标准化系数
+    np.savez(args.scaler_save_path, mean=train_dataset.mean.numpy(), std=train_dataset.std.numpy())
+    print(f"特征值标准化参数已保存为：{args.scaler_save_path}")
+
+    # 验证集/测试集
+    val_dataset = TimeDataset(
+        X_val, y_val,
+        mean=train_dataset.mean,
+        std=train_dataset.std,
+        log_transform=False
+    )
+    test_dataset = TimeDataset(
+        X_test, y_test,
+        mean=train_dataset.mean,
+        std=train_dataset.std,
+        log_transform=False
+    )
+    test_dataset_mix = TimeDataset(
+        X_test_mix, y_test_mix,
+        mean=train_dataset.mean,
+        std=train_dataset.std,
+        log_transform=False
+    )
+
+    print(f"特征标准化均值范围：[{train_dataset.mean.min():.4f}, {train_dataset.mean.max():.4f}]")
+    print(f"train dataset: {len(train_dataset)}, batch size: {args.batch_size}")
+    print(f"val dataset: {len(val_dataset)}, batch size: {args.batch_size}")
+    print(f"test dataset: {len(test_dataset)}, batch size: {args.batch_size}")
+    print(f"mix test dataset: {len(test_dataset_mix)}, batch size: {args.batch_size}")
+
+    batch_size = args.batch_size
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=2, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=2, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, num_workers=2, shuffle=True)
+    test_loader_mix = DataLoader(test_dataset_mix, batch_size=batch_size, num_workers=2, shuffle=True)
+    return train_dataset, val_dataset, test_dataset, test_dataset_mix, train_loader, val_loader, test_loader, test_loader_mix
+
 class TimeDataset(Dataset):
     def __init__(self, X, y, mean=None, std=None, log_transform=True):
         self.X = torch.tensor(X, dtype=torch.float32)
@@ -173,29 +395,31 @@ class TimeDataset(Dataset):
 
 # -------------------------- 4. MLP回归模型（无修改） --------------------------
 class TimePredictMLP(nn.Module):
-    def __init__(self, input_dim=9 + 21, hidden_dims=[64, 32, 16]):
+    def __init__(self, input_dim=6, hidden_dims=[64, 32, 16]):
         super(TimePredictMLP, self).__init__()
         # 构建网络层
-        layers = []
-        # 输入层到第一个隐藏层
-        layers.append(nn.Linear(input_dim, hidden_dims[0]))
-        layers.append(nn.ReLU())
-        layers.append(nn.BatchNorm1d(hidden_dims[0]))
+        self.layers = nn.Sequential(
+            nn.Linear(input_dim, hidden_dims[0]),
+            nn.BatchNorm1d(hidden_dims[0]),
+            nn.ReLU(),
+            nn.Linear(hidden_dims[0], hidden_dims[1]),
+            nn.BatchNorm1d(hidden_dims[1]),
+            nn.ReLU(),
+            nn.Linear(hidden_dims[1], hidden_dims[2]),
+            nn.BatchNorm1d(hidden_dims[2]),
+            nn.ReLU(),
+            nn.Linear(hidden_dims[2], 1)
+        )
+        self.init_weights()
         
-        # 中间隐藏层
-        for i in range(1, len(hidden_dims)):
-            layers.append(nn.Linear(hidden_dims[i-1], hidden_dims[i]))
-            # layers.append(nn.ReLU())
-            # layers.append(nn.BatchNorm1d(hidden_dims[i]))
-            # layers.append(nn.Dropout(0.1))
-        
-        # 输出层
-        layers.append(nn.Linear(hidden_dims[-1], 1))
-        
-        self.model = nn.Sequential(*layers)
+    def init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                torch.nn.init.kaiming_normal_(m.weight)
+                m.bias.data.fill_(0)
         
     def forward(self, x):
-        return self.model(x).squeeze()
+        return self.layers(x)
 
 # -------------------------- 5. 训练函数（无修改，仅接收device参数） --------------------------
 def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, 
@@ -271,7 +495,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
 
 
 # -------------------------- 6. 评估模型（无修改） --------------------------
-def evaluate_model(model, test_loader, criterion, device, test_dataset, best_model_save_path):
+def evaluate_model(model, test_loader, criterion, device, test_dataset, best_model_save_path, mode="normal"):
     model.load_state_dict(torch.load(best_model_save_path))
     model.to(device)
     model.eval()
@@ -279,12 +503,15 @@ def evaluate_model(model, test_loader, criterion, device, test_dataset, best_mod
     test_loss = 0.0
     all_preds_raw = []
     all_targets_raw = []
-    
+    count = 0
+    mean_inference_time = 0
     with torch.no_grad():
         for features, targets_processed in test_loader:
+            count += 1
             features, targets_processed = features.to(device), targets_processed.to(device)
+            inference_start_time = time.time()
             outputs_processed = model(features)
-            
+            mean_inference_time = (mean_inference_time * (count - 1) + (time.time() - inference_start_time)) / count
             # 计算处理后的损失
             loss = criterion(outputs_processed, targets_processed)
             test_loss += loss.item() * features.size(0)
@@ -304,12 +531,15 @@ def evaluate_model(model, test_loader, criterion, device, test_dataset, best_mod
     rmse_raw = np.sqrt(np.mean((preds_np - targets_np) **2))
     rel_error = np.mean(np.abs(preds_np - targets_np) / (targets_np + 1e-6)) * 100
     
-    print(f"\n测试集评估结果:")
+    if mode == "normal":
+        print(f"\n测试集评估结果:")
+    elif mode == "mix":
+        print(f"\n混合测试集评估结果:")
     print(f"处理后数据的测试损失 ({args.loss.upper()}): {test_loss:.6f}")
     print(f"原始时间尺度的MAE: {mae_raw:.4f} us")
     print(f"原始时间尺度的RMSE: {rmse_raw:.4f} us")
     print(f"平均相对误差: {rel_error:.2f}%")
-    
+    print(f"平均推理时间: {mean_inference_time:.6f} s")
     return test_loss, mae_raw, rmse_raw, rel_error, all_preds_raw, all_targets_raw
 
 
@@ -411,64 +641,13 @@ def main(args):
     if not os.path.exists(args.data_path):
         raise FileNotFoundError(f"错误：未找到数据文件 {args.data_path}，请先运行数据预处理脚本")
     
-    data = np.load(args.data_path)
-    X = data["X"]
-    y = data["y"]
-    
-    # 输入维度由数据自动获取
-    input_dim = X.shape[1]
-    print(f"数据加载完成：特征形状 {X.shape}，目标形状 {y.shape}，模型输入维度: {input_dim}")
-    print(f"原始时间数据范围：min={y.min():.4f} us, max={y.max():.4f} us, mean={y.mean():.4f} us")
-    print(f"时间跨度比例（max/min）：{y.max()/y.min():.2f} 倍")
-    
-    # 2. 划分数据集（固定70%训练、15%验证、15%测试）
-    total_size = len(X)
-    train_size = int(0.7 * total_size)
-    val_size = int(0.15 * total_size)
-    test_size = total_size - train_size - val_size
-    
-    # 设置随机种子确保划分一致
-    generator = torch.Generator().manual_seed(42)
-    indices = torch.randperm(total_size, generator=generator).numpy()
-    
-    train_indices = indices[:train_size]
-    val_indices = indices[train_size:train_size+val_size]
-    test_indices = indices[train_size+val_size:]
-    
-    # 创建数据集
-    train_dataset = TimeDataset(
-        X[train_indices], y[train_indices],
-        log_transform=True
-    )
-    # 保存特征标准化参数
-    np.savez(args.scaler_save_path, mean=train_dataset.mean.numpy(), std=train_dataset.std.numpy())
-    print(f"特征标准化参数已保存为: {args.scaler_save_path}")
-    
-    # 验证集/测试集
-    val_dataset = TimeDataset(
-        X[val_indices], y[val_indices],
-        mean=train_dataset.mean, 
-        std=train_dataset.std,
-        log_transform=True
-    )
-    test_dataset = TimeDataset(
-        X[test_indices], y[test_indices],
-        mean=train_dataset.mean, 
-        std=train_dataset.std,
-        log_transform=True
-    )
-    
-    print(f"数据集划分：训练集 {len(train_dataset)} 条，验证集 {len(val_dataset)} 条，测试集 {len(test_dataset)} 条")
-    print(f"特征标准化均值范围：[{train_dataset.mean.min():.4f}, {train_dataset.mean.max():.4f}]")
-    
-    # 3. 创建数据加载器
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=2)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=2)
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=2)
-    
-    # 4. 初始化模型、损失函数和优化器（通过函数调用使用命令行参数）
+    # 2. 创建数据加载器
+    train_dataset, val_dataset, test_dataset, test_dataset_mix, train_loader, val_loader, test_loader, test_loader_mix = process_data(args)
+
+    # 3. 初始化模型、损失函数和优化器（通过函数调用使用命令行参数）
     device = get_device(args)
-    model = TimePredictMLP(input_dim=input_dim, hidden_dims=args.hidden_dims)
+    model = TimePredictMLP(input_dim=args.input_dim, hidden_dims=args.hidden_dims)
+    print(model)
 
     # 调用自定义函数，根据命令行参数创建损失函数和优化器
     criterion = create_loss_function(args)  # 使用命令行--loss参数
@@ -482,18 +661,22 @@ def main(args):
         verbose=True
     )
 
-    # 5. 训练模型
+    # 4. 训练模型
     model, train_losses, val_losses, best_val_loss = train_model(
         model, train_loader, val_loader, criterion, optimizer, scheduler, 
         device, args, best_model_save_path=args.model_save_path
     )
     
-    # 6. 评估模型
+    # 5. 评估模型
     test_loss, mae_raw, rmse_raw, rel_error, preds_raw, targets_raw = evaluate_model(
-        model, test_loader, criterion, device, test_dataset, best_model_save_path=args.model_save_path
+        model, test_loader, criterion, device, test_dataset, best_model_save_path=args.model_save_path, mode="normal"
     )
     
-    # 7. 可视化结果
+    test_loss_mix, mae_raw_mix, rmse_raw_mix, rel_error_mix, preds_raw_mix, targets_raw_mix = evaluate_model(
+        model, test_loader_mix, criterion, device, test_dataset_mix, best_model_save_path=args.model_save_path, mode="mix"
+    )
+
+    # 6. 可视化结果
     plot_loss_curves(train_losses, val_losses, loss_type=args.loss)
     plot_predictions(preds_raw, targets_raw)
     plot_log_predictions(preds_raw, targets_raw)
