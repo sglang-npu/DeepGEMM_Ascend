@@ -17,19 +17,14 @@ class OMModelInference:
         # 2. 特征定义（不变）
         self.original_features = [
             'M', 'N', 'K', 
-            'm_sections', 'n_sections', 
-            'm_sec_o_blocks', 'n_sec_o_blocks', 
-            'k_o_iter_blocks', 'db_o_blocks'
+            'm_tile', 'n_tile', 'k_tile',
         ]
         self.extended_features = self.original_features + [
-            'm_blocks', 'n_blocks', 'k_blocks',
-            'm_o_fix', 'n_o_fix', 'k_o_fix',
-            'db_o_num', 'r_m_blocks', 'r_n_blocks',
-            'k_iters', 'k_tail_blocks', 'r_db_num', 'r_k_blocks',
-            'm_iters', 'n_iters', 'm_parts', 'n_parts',
-            'm_sc_blocks', 'n_sc_blocks', 'r_m_parts', 'r_n_parts'
+            'MN', 'MK', 'NK', 
+            'mn_tile', 'mk_tile', 'nk_tile',
+            'AI_core'
         ]
-        self.feature_dim = len(self.extended_features)  # 30维
+        self.feature_dim = len(self.extended_features)  # 13维
         
         # 3. 加载scaler（不变）
         try:
@@ -70,8 +65,8 @@ class OMModelInference:
             raise ValueError(f"输入必须是二维（batch_size, 9），实际为{input_np.ndim}维")
         
         original_batch_size, input_dim = input_np.shape
-        if input_dim != 9:
-            raise ValueError(f"输入特征维度必须为9，实际为{input_dim}")
+        if input_dim != 6:
+            raise ValueError(f"输入特征维度必须为6，实际为{input_dim}")
 
         # 2. 填充至固定batch_size（核心修改）
         if original_batch_size > self.fixed_batch_size:
@@ -94,36 +89,13 @@ class OMModelInference:
             input_data = dict(zip(self.original_features, sample))
             
             # 扩展特征计算（与原逻辑完全一致）
-            input_data['m_blocks'] = self.align16(input_data['M']) // 16
-            input_data['n_blocks'] = self.align16(input_data['N']) // 16
-            input_data['k_blocks'] = self.align16(input_data['K']) // 16
-            input_data['m_o_fix'] = self.align16(input_data['M']) - input_data['M']
-            input_data['n_o_fix'] = self.align16(input_data['N']) - input_data['N']
-            input_data['k_o_fix'] = self.align16(input_data['K']) - input_data['K']
-            input_data['db_o_num'] = input_data['k_o_iter_blocks'] // input_data['db_o_blocks']
-            
-            input_data['r_m_blocks'] = input_data['m_blocks'] % input_data['m_sec_o_blocks']
-            input_data['r_n_blocks'] = input_data['n_blocks'] % input_data['n_sec_o_blocks']
-            input_data['r_m_blocks'] = input_data['m_sec_o_blocks'] if input_data['r_m_blocks'] == 0 else input_data['r_m_blocks']
-            input_data['r_n_blocks'] = input_data['n_sec_o_blocks'] if input_data['r_n_blocks'] == 0 else input_data['r_n_blocks']
-            
-            input_data['k_iters'] = (input_data['k_blocks'] + input_data['k_o_iter_blocks'] - 1) // input_data['k_o_iter_blocks']
-            input_data['k_tail_blocks'] = input_data['k_blocks'] % input_data['k_o_iter_blocks']
-            if input_data['k_tail_blocks'] == 0:
-                input_data['r_db_num'] = input_data['db_o_num']
-                input_data['r_k_blocks'] = input_data['db_o_blocks']
-            else:
-                input_data['r_db_num'] = (input_data['k_tail_blocks'] + input_data['db_o_blocks'] - 1) // input_data['db_o_blocks']
-                input_data['r_k_blocks'] = input_data['k_tail_blocks'] - ((input_data['r_db_num'] - 1) * input_data['db_o_blocks'])
-            
-            input_data['m_iters'] = (input_data['m_blocks'] + input_data['m_sec_o_blocks'] - 1) // input_data['m_sec_o_blocks']
-            input_data['n_iters'] = (input_data['n_blocks'] + input_data['n_sec_o_blocks'] - 1) // input_data['n_sec_o_blocks']
-            input_data['m_parts'] = input_data['m_iters'] // input_data['m_sections']
-            input_data['n_parts'] = input_data['n_iters'] // input_data['n_sections']
-            input_data['m_sc_blocks'] = input_data['m_parts'] * input_data['m_sec_o_blocks']
-            input_data['n_sc_blocks'] = input_data['n_parts'] * input_data['n_sec_o_blocks']
-            input_data['r_m_parts'] = input_data['m_iters'] - ((input_data['m_sections'] - 1) * input_data['m_parts'])
-            input_data['r_n_parts'] = input_data['n_iters'] - ((input_data['n_sections'] - 1) * input_data['n_parts'])
+            input_data['MN'] = input_data['M'] * input_data['N']
+            input_data['MK'] = input_data['M'] * input_data['K']
+            input_data['NK'] = input_data['N'] * input_data['K']
+            input_data['mn_tile'] = input_data['m_tile'] * input_data['n_tile']
+            input_data['mk_tile'] = input_data['m_tile'] * input_data['k_tile']
+            input_data['nk_tile'] = input_data['n_tile'] * input_data['k_tile']
+            input_data['AI_core'] = np.ceil(input_data['M'] / input_data['m_tile']) * np.ceil(input_data['N'] / input_data['n_tile'])
             
             extended_sample = np.array([input_data[feat] for feat in self.extended_features], dtype=np.float32)
             extended_features_list.append(extended_sample)
@@ -159,9 +131,9 @@ class OMModelInference:
             raise ValueError(f"解析模型输出失败：{str(e)}")
         
         # 3. 逆变换（不变）
-        y_original = np.exp(output_array) - 1e-6
-        y_original = np.clip(y_original, a_min=1e-9, a_max=None)
-        
+        # y_original = np.exp(output_array) - 1e-6
+        # y_original = np.clip(y_original, a_min=1e-9, a_max=None)
+        y_original = output_array
         return y_original
 
     def predict(self, input_batch):
@@ -190,15 +162,15 @@ if __name__ == "__main__":
     # 1. 初始化推理器（指定模型支持的固定batch_size，如32）
     inferencer = OMModelInference(
         device_id=0,
-        model_path="../om_best_model_batch.om",
-        scaler_path="../best_result/scaler.npz",
+        model_path="./om_best_model.om",
+        scaler_path="./scaler.npz",
         fixed_batch_size=50
     )
     
     # 2. 准备输入（batch_size=2，小于固定值32）
     input_batch = [
-        [1024, 1024, 1024, 2, 2, 16, 16, 32, 8],
-        [2048, 2048, 2048, 4, 4, 32, 32, 64, 16]
+        [12, 48, 768, 4, 4, 64], # 7.24
+        [4, 4, 16, 2, 4, 48] # 4.66
     ]
     
     # 3. 批量预测（自动填充至32，后处理截断回2）
