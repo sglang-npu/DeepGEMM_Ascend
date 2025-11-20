@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
+import math
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, random_split
 import matplotlib.pyplot as plt
@@ -26,15 +28,21 @@ def parse_args():
     parser.add_argument(
         "--batch-size", 
         type=int, 
-        default=512, 
+        default=2048, 
         help="训练/验证/测试的批次大小（默认：512，需为正整数）"
     )
-    
+    parser.add_argument(
+        "--features",
+        type=str,
+        default="0,1,2,3,4,5,9,10,11,12,13,14,15",
+        help="默认：13个标签，M,N,K,m,n,k,MN,MK,NK,mn,mk,nk,ai core"
+    )
+
     # -------------------------- 模型结构参数 --------------------------
     parser.add_argument(
         "--hidden-dims", 
         type=str, 
-        default="64, 128, 64", 
+        default="121,242,484,969,1939,969,484,242,121", 
         help="隐藏层维度列表（格式：逗号分隔，如'64,32,16'，默认：64,32,12）"
     )
     
@@ -67,7 +75,7 @@ def parse_args():
     parser.add_argument(
         "--optimizer", 
         type=str, 
-        default="adam", 
+        default="adamw", 
         choices=["adam", "sgd", "rmsprop", "adamw"], 
         help="选择优化器（默认: adam）"
     )
@@ -84,7 +92,7 @@ def parse_args():
     parser.add_argument(
         "--npu-id", 
         type=int, 
-        default=0, 
+        default=1, 
         help="指定使用的NPU设备编号（如0、1，默认：0；仅当NPU可用时生效）"
     )
     # -------------------------- 保存参数 --------------------------
@@ -119,7 +127,14 @@ def parse_args():
         raise ValueError("NPU编号--npu-id必须为非负整数！")
     if not (0 < args.momentum < 1):
         raise ValueError("动量值必须在(0, 1)范围内！")
-    
+    try:
+        args.features = [int(x) for x in args.features.split(",")]
+        if any(dim < 0 for dim in args.features):
+            raise ValueError("特征索引必须为非负整数！")
+    except ValueError:
+        raise ValueError("特征列表格式错误！需为逗号分隔的整数（如0,1,2）")
+    if len(args.features)>0:
+        args.input_dim = len(args.features)
     return args
 
 # -------------------------- 2. 设备配置（支持指定NPU编号） --------------------------
@@ -183,12 +198,15 @@ def process_data(args):
             # 计算交叉项
             cross_term = [
                 inputs[:, 0] * inputs[:, 1], # M * N
-                inputs[:, 0] * inputs[:, 0], # M * K
+                inputs[:, 0] * inputs[:, 2], # M * K
                 inputs[:, 1] * inputs[:, 2], # N * K
                 inputs[:, 3] * inputs[:, 4], # mTile * nTile
                 inputs[:, 3] * inputs[:, 5], # mTile * kTile
                 inputs[:, 4] * inputs[:, 5], # nTile * kTile
                 np.ceil(inputs[:, 1] / inputs[:, 3]) * np.ceil(inputs[:, 2] / inputs[:, 4]), # AI core
+                inputs[:, 0] * inputs[:, 1] * inputs[:, 2] * (1 / inputs[:, 3] + 1 / inputs[:, 4]) / 16, # 数据读取量 MNK(1/m+1/n)/16
+                inputs[:, 0] * inputs[:, 1] * inputs[:, 2] / (inputs[:, 5] * 16), # 数据写出量 MNK/(16k)
+                inputs[:, 0] * inputs[:, 1] * inputs[:, 2] # 计算量MNK
             ]
 
             # 将交叉项转换为二维数组
@@ -196,6 +214,7 @@ def process_data(args):
 
             # 拼接原始输入和交叉项
             combined_inputs = np.concatenate([inputs, cross_term_array], axis=1)
+            combined_inputs = combined_inputs[:, args.features]
 
             # 转换为Pytorch Tensor
             inputs = torch.tensor(combined_inputs, dtype=torch.float32)
@@ -213,12 +232,15 @@ def process_data(args):
             # 计算交叉项
             cross_term = [
                 inputs[:, 0] * inputs[:, 1], # M * N
-                inputs[:, 0] * inputs[:, 0], # M * K
+                inputs[:, 0] * inputs[:, 2], # M * K
                 inputs[:, 1] * inputs[:, 2], # N * K
                 inputs[:, 3] * inputs[:, 4], # mTile * nTile
                 inputs[:, 3] * inputs[:, 5], # mTile * kTile
                 inputs[:, 4] * inputs[:, 5], # nTile * kTile
                 np.ceil(inputs[:, 0] / inputs[:, 3]) * np.ceil(inputs[:, 1] / inputs[:, 4]), # AI core
+                inputs[:, 0] * inputs[:, 1] * inputs[:, 2] * (1 / inputs[:, 3] + 1 / inputs[:, 4]) / 16, # 数据读取量 MNK(1/m+1/n)/16
+                inputs[:, 0] * inputs[:, 1] * inputs[:, 2] / (inputs[:, 5] * 16), # 数据写出量 MNK/(16k)
+                inputs[:, 0] * inputs[:, 1] * inputs[:, 2] # 计算量MNK
             ]
 
             # 将交叉项转换为二维数组
@@ -226,7 +248,7 @@ def process_data(args):
 
             # 拼接原始输入和交叉项
             combined_inputs = np.concatenate([inputs, cross_term_array], axis=1)
-
+            combined_inputs = combined_inputs[:, args.features]
             # 转换为Pytorch Tensor
             inputs = torch.tensor(combined_inputs, dtype=torch.float32)
             target = df['time'].values
@@ -394,22 +416,50 @@ class TimeDataset(Dataset):
             return y_processed
 
 # -------------------------- 4. MLP回归模型（无修改） --------------------------
+# class TimePredictMLP(nn.Module):
+#     def __init__(self, input_dim=6, hidden_dims=[64, 32, 16]):
+#         super(TimePredictMLP, self).__init__()
+#         # 构建网络层
+#         self.layers = nn.Sequential(
+#             nn.Linear(input_dim, hidden_dims[0]),
+#             nn.BatchNorm1d(hidden_dims[0]),
+#             nn.ReLU(),
+#             nn.Linear(hidden_dims[0], hidden_dims[1]),
+#             nn.BatchNorm1d(hidden_dims[1]),
+#             nn.ReLU(),
+#             nn.Linear(hidden_dims[1], hidden_dims[2]),
+#             nn.BatchNorm1d(hidden_dims[2]),
+#             nn.ReLU(),
+#             nn.Linear(hidden_dims[2], 1)
+#         )
+#         self.init_weights()
+        
+#     def init_weights(self):
+#         for m in self.modules():
+#             if isinstance(m, nn.Linear):
+#                 torch.nn.init.kaiming_normal_(m.weight)
+#                 m.bias.data.fill_(0)
+        
+#     def forward(self, x):
+#         return self.layers(x)
+
 class TimePredictMLP(nn.Module):
     def __init__(self, input_dim=6, hidden_dims=[64, 32, 16]):
         super(TimePredictMLP, self).__init__()
         # 构建网络层
-        self.layers = nn.Sequential(
-            nn.Linear(input_dim, hidden_dims[0]),
-            nn.BatchNorm1d(hidden_dims[0]),
-            nn.ReLU(),
-            nn.Linear(hidden_dims[0], hidden_dims[1]),
-            nn.BatchNorm1d(hidden_dims[1]),
-            nn.ReLU(),
-            nn.Linear(hidden_dims[1], hidden_dims[2]),
-            nn.BatchNorm1d(hidden_dims[2]),
-            nn.ReLU(),
-            nn.Linear(hidden_dims[2], 1)
-        )
+        layers = []
+        # 添加输入层到第一个隐藏层
+        layers.append(nn.Linear(input_dim, hidden_dims[0]))
+        layers.append(nn.BatchNorm1d(hidden_dims[0]))
+        layers.append(nn.ReLU())
+        # 添加中间隐藏层
+        for i in range(1,len(hidden_dims)):
+            layers.append(nn.Linear(hidden_dims[i - 1], hidden_dims[i]))
+            layers.append(nn.BatchNorm1d(hidden_dims[i]))
+            layers.append(nn.ReLU())
+        # 添加中间隐藏层
+        layers.append(nn.Linear(hidden_dims[-1], 1))
+        self.layers = nn.Sequential(*layers)
         self.init_weights()
         
     def init_weights(self):
@@ -420,6 +470,7 @@ class TimePredictMLP(nn.Module):
         
     def forward(self, x):
         return self.layers(x)
+
 
 # -------------------------- 5. 训练函数（无修改，仅接收device参数） --------------------------
 def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, 
