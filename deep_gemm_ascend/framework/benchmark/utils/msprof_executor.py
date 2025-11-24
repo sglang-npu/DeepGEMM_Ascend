@@ -37,7 +37,7 @@ class MsProfExecutor:
     def __init__(self,
                  output: str,
                  aic_metrics: str,
-                 kernel_name="",
+                 kernel_name="_Z",
                  launch_count=0,
                  timeout=15):
         self.ms_prof_cmd = "msprof op "
@@ -51,9 +51,9 @@ class MsProfExecutor:
         self.timeout = timeout
 
     def print_cmd(self):
-        logger.info(f"msprof exec cmd head : '{self.ms_prof_cmd}'")
+        logger.debug(f"msprof exec cmd head : '{self.ms_prof_cmd}'")
 
-    def process(self, program: str):
+    def process(self, program: str) -> str:
         proc = None
         full_cmd = self.ms_prof_cmd + program
         try:
@@ -70,7 +70,7 @@ class MsProfExecutor:
                 stdout, stderr = proc.communicate(timeout=self.timeout)
                 returncode = proc.returncode
             except subprocess.TimeoutExpired:
-                logger.err(f"[ms_prof] exec timeout({self.timeout}s).")
+                logger.error(f"[ms_prof] exec timeout({self.timeout}s).")
                 kill_process_group(proc)
                 return ""
             

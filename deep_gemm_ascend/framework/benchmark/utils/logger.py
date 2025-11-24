@@ -22,7 +22,7 @@ def setup_logger():
         datafmt="%Y-%m-%d %H:%M:%S",
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler("process_log.log", encoding="utf-8")
+            # logging.FileHandler("process_log.log", encoding="utf-8")
         ]
     )
     return logging.getlogger()
