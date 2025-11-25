@@ -5,6 +5,10 @@ from logger import logger
 
 
 def kill_process_group(proc):
+    """
+    功能: 终止进程
+    输入: subprocess.Popen打开的进程对象
+    """
     try:
         if proc.poll() is None:
             if hasattr(os, 'killpg') and hasattr(os, 'getpgid'):
@@ -24,16 +28,20 @@ def kill_process_group(proc):
                 proc.wait(timeout=1.0)
             except subprocess.TimeoutExpired:
                 logger.error("proc kill timeout.")
-                pass
     except (ProcessLookupError, OSError):
         logger.error("proc kill failed.")
-        pass
     except Exception as e:
         logger.error(f"proc kill failed. err msg: {e}")
-        pass
 
 
 class MsProfExecutor:
+    """
+    功能: msprof op的执行器
+    使用: 
+    1. 创建对象 executor = MsProfExecutor('./output', 'PipeUtilization', kernel_name, 1, 15)
+    2. 然后调用 executor.process('./executable param1 param2')
+    3. 也可以调用 executor.print_cmd() 查看 msprof op 的命令是否正确(需要INFO等级日志)
+    """
     def __init__(self,
                  output: str,
                  aic_metrics: str,
@@ -51,7 +59,7 @@ class MsProfExecutor:
         self.timeout = timeout
 
     def print_cmd(self):
-        logger.debug(f"msprof exec cmd head : '{self.ms_prof_cmd}'")
+        logger.info(f"msprof exec cmd head : '{self.ms_prof_cmd}'")
 
     def process(self, program: str) -> str:
         proc = None
