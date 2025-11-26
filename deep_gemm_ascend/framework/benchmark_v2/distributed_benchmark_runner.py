@@ -81,7 +81,7 @@ class GEMMBenchmarkRunner:
         
         # 初始化ResultParse，根据operator_type确定kernel_list
         kernel_list = self._get_kernel_list(operator_type)
-        self.result_parser = ResultParse(kernel_list=kernel_list)
+        self.result_parser = ResultParse(kernel_list=kernel_list, device_id=self.npu_id)
         
         # 缓存shape字符串，避免重复计算
         self.shape_str_cache = {}

@@ -4,7 +4,7 @@ import glob
 import os
 import csv
 
-from logger import logger
+from .logger import logger
 
 
 # 从msprof op的采集到的字符串结果对应的规则(import re)
