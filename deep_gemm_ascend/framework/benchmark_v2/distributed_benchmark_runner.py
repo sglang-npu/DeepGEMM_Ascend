@@ -213,6 +213,31 @@ class GEMMBenchmarkRunner:
         """
         # 计算期望的结果数量
         expected_count = end_idx - start_idx
+        if expected_count <= 0:
+            logger.error(
+                "Rank %s (NPU %s) 发现无效的区间 [%s, %s)，expected_count=%s",
+                self.rank_id,
+                self.npu_id,
+                start_idx,
+                end_idx,
+                expected_count,
+            )
+            return []
+        range_len = expected_count
+
+        def _split_mid() -> Optional[int]:
+            """根据当前区间计算安全的拆分点，确保 start < mid < end。"""
+            if range_len <= 1:
+                return None
+            split_step = max(1, range_len // 2)
+            mid = start_idx + split_step
+            if mid >= end_idx:
+                mid = end_idx - 1
+            if mid <= start_idx:
+                mid = start_idx + 1
+            if mid <= start_idx or mid >= end_idx:
+                return None
+            return mid
 
         # 构建program命令：二进制bin路径 NPU卡号 mode(默认2) 指定shape的tiling csv文件 起始index 终止index 是否检查精度（默认0）
         program = f"{self.catlass_bin_path} {self.npu_id} 2 {csv_path} {start_idx} {end_idx} 0"
@@ -232,15 +257,19 @@ class GEMMBenchmarkRunner:
         # 检查结果是否异常
         if self._is_result_abnormal(output, expected_count):
             # 如果跨度为1，无法再缩小，返回包含-1的结果列表
-            if span <= 1:
+            if span <= 1 or range_len <= 1:
                 error_msg = f"Rank {self.rank_id} (NPU {self.npu_id}) 跨度为1仍异常，为索引范围 [{start_idx}, {end_idx}) 返回-1标记"
                 logger.error(error_msg)
                 # 返回包含-1的结果列表，参考result_parse.py的格式: (kernel_name, accuracy, duration, block_dim, mix_block_dim)
                 return [("", -1, -1, -1, -1) for _ in range(expected_count)]
             
-            # 跨度减半，递归处理
-            new_span = span // 2
-            mid_idx = start_idx + new_span
+            # 跨度减半，递归处理。需要确保拆分点位于 (start_idx, end_idx) 之间
+            new_span = max(1, span // 2)
+            mid_idx = _split_mid()
+            if mid_idx is None:
+                error_msg = f"Rank {self.rank_id} (NPU {self.npu_id}) 无法继续拆分区间 [{start_idx}, {end_idx})，返回-1标记"
+                logger.error(error_msg)
+                return [("", -1, -1, -1, -1) for _ in range(expected_count)]
             
             # 递归处理前半部分（传入new_span以继续缩小）
             results_part1 = self._execute_with_span_reduction(csv_path, start_idx, mid_idx, new_span)
@@ -255,14 +284,18 @@ class GEMMBenchmarkRunner:
             parsed_results = self.result_parser.parse_multi_result(output, expected_count)
             if parsed_results is None:
                 # 如果解析返回None，且跨度为1，返回-1标记
-                if span <= 1:
+                if span <= 1 or range_len <= 1:
                     error_msg = f"Rank {self.rank_id} (NPU {self.npu_id}) 解析返回None，跨度为1，为索引范围 [{start_idx}, {end_idx}) 返回-1标记"
                     logger.error(error_msg)
                     return [("", -1, -1, -1, -1) for _ in range(expected_count)]
                 else:
                     # 递归缩小
-                    new_span = span // 2
-                    mid_idx = start_idx + new_span
+                    new_span = max(1, span // 2)
+                    mid_idx = _split_mid()
+                    if mid_idx is None:
+                        error_msg = f"Rank {self.rank_id} (NPU {self.npu_id}) 解析返回None但无法拆分区间 [{start_idx}, {end_idx})，返回-1标记"
+                        logger.error(error_msg)
+                        return [("", -1, -1, -1, -1) for _ in range(expected_count)]
                     results_part1 = self._execute_with_span_reduction(csv_path, start_idx, mid_idx, new_span)
                     results_part2 = self._execute_with_span_reduction(csv_path, mid_idx, end_idx, new_span)
                     return results_part1 + results_part2
@@ -271,14 +304,18 @@ class GEMMBenchmarkRunner:
             error_msg = f"Rank {self.rank_id} (NPU {self.npu_id}) 解析结果失败: {e}"
             logger.error(error_msg)
             # 解析失败，如果跨度为1则返回-1标记，否则递归缩小
-            if span <= 1:
+            if span <= 1 or range_len <= 1:
                 error_msg2 = f"Rank {self.rank_id} (NPU {self.npu_id}) 解析异常，跨度为1，为索引范围 [{start_idx}, {end_idx}) 返回-1标记"
                 print(error_msg2)
                 logger.error(error_msg2)
                 return [("", -1, -1, -1, -1) for _ in range(expected_count)]
             else:
-                new_span = span // 2
-                mid_idx = start_idx + new_span
+                new_span = max(1, span // 2)
+                mid_idx = _split_mid()
+                if mid_idx is None:
+                    error_msg2 = f"Rank {self.rank_id} (NPU {self.npu_id}) 解析异常且无法拆分区间 [{start_idx}, {end_idx})，返回-1标记"
+                    logger.error(error_msg2)
+                    return [("", -1, -1, -1, -1) for _ in range(expected_count)]
                 results_part1 = self._execute_with_span_reduction(csv_path, start_idx, mid_idx, new_span)
                 results_part2 = self._execute_with_span_reduction(csv_path, mid_idx, end_idx, new_span)
                 return results_part1 + results_part2
