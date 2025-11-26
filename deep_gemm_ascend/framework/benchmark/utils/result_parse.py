@@ -104,8 +104,9 @@ class ResultParse:
     2. 调用 res_parse.parse_multi_result(mspros_res, count) 一次性解析采集到的多条算子信息
     3. 也可以调用 res_parse.parse_result(mspros_res, ["kernel_name", "duration"]) 解析单条算子信息, 如果count大于1, 不建议单条采集
     """
-    def __init__(self, kernel_list: List[str]):
+    def __init__(self, kernel_list: List[str], device_id: int):
         self.kernel_list = kernel_list
+        self.device_dir = f"device{device_id}"
         self.re_searcher = {}
         for rule_name, rule_str in str_rule.items():
             self.re_searcher[rule_name] = re.compile(rule_str)
@@ -184,7 +185,11 @@ class ResultParse:
         """
         logger.debug(f"try to get csv list for kernel {op_name}.")
         # 1、校验msprof目录
-        op_res_dir = f"{msprof_res_dir}/{op_name}"
+        op_res_dir = msprof_res_dir
+        path_device = os.path.join(msprof_res_dir, self.device_dir)
+        if os.path.exists(path_device):
+            op_res_dir = path_device
+        op_res_dir = os.path.join(op_res_dir, op_name)
         if not os.path.isdir(op_res_dir):
             logger.error(f"op result directory '{op_res_dir}' is not exist.")
             return []
