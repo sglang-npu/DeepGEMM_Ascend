@@ -239,7 +239,7 @@ python -m framework.benchmark_v2.jsonl2excel \
 | `PaddingMatmulKernel` / `PaddingCommonMatmulKernel` | 缓存约束 + 至少一个 PaddingTag 非 `NONE` |
 
 ### 参数生成
-- 默认生成约 300~500 个有效组合（受约束限制）
+- 默认生成约 300~1000 个有效组合（受约束限制）
 - `filter_parameters(shape)` 根据 `operator_type` 自动筛选
 - `mTile` / `nTile` / `kTile` 范围：1-64，采样密度优化
 
@@ -266,5 +266,3 @@ python -m framework.benchmark_v2.jsonl2excel \
 - `execution_simulation.md`：完整的批量/异常执行推演
 - `distributed_benchmark_runner.py`：批量执行与递归拆分实现
 - `jsonl2excel.py`：结果加工脚本
-
-欢迎根据业务需求扩展脚本，并持续在 README 补充实践经验。
