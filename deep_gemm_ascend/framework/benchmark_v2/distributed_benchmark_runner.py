@@ -7,6 +7,7 @@
 import os
 import math
 import csv
+import shutil
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any
 
@@ -85,6 +86,27 @@ class GEMMBenchmarkRunner:
         
         # 缓存shape字符串，避免重复计算
         self.shape_str_cache = {}
+    
+    def _clear_msp_dir(self) -> None:
+        """
+        清空msprof输出目录
+        
+        删除目录下所有文件和子目录，但保留目录本身
+        """
+        if not os.path.exists(self.rank_msp_dir):
+            return
+        
+        try:
+            # 删除目录下所有内容
+            for item in os.listdir(self.rank_msp_dir):
+                item_path = os.path.join(self.rank_msp_dir, item)
+                if os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+                else:
+                    os.remove(item_path)
+            logger.debug(f"Rank {self.rank_id} (NPU {self.npu_id}) 已清空msp目录: {self.rank_msp_dir}")
+        except Exception as e:
+            logger.warning(f"Rank {self.rank_id} (NPU {self.npu_id}) 清空msp目录失败: {e}")
     
     def _get_kernel_list(self, operator_type: Optional[str]) -> List[str]:
         """
@@ -457,6 +479,9 @@ class GEMMBenchmarkRunner:
                             )
                         result_writer.add_result(result)
                         pbar.update(1)
+                
+                # 每批次完成后清空msp目录，释放磁盘空间
+                self._clear_msp_dir()
                 
                 # 移动到下一批次
                 current_idx = end_idx
