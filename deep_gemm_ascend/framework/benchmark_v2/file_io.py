@@ -114,15 +114,22 @@ def load_shapes_from_excel(
         
         # 提取M, N, K列，转换为整数列表
         shapes = []
+        filtered_n1 = 0
         for _, row in filtered_df.iterrows():
             try:
                 m = int(row['M'])
                 n = int(row['N'])
                 k = int(row['K'])
+                if n == 1:
+                    filtered_n1 += 1
+                    continue
                 shapes.append([m, n, k])
             except (ValueError, TypeError):
                 # 静默跳过无效行
                 continue
+        
+        if filtered_n1:
+            print(f"[load_shapes_from_excel] 已额外剔除 N == 1 的 shape 数量: {filtered_n1}")
         
         # 对筛选后的shapes进行切片（如果提供了start_idx或end_idx）
         if start_idx is not None or end_idx is not None:
