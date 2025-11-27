@@ -499,18 +499,34 @@ class GEMMBenchmarkRunner:
         """
         运行分配给当前进程的shape的基准测试
         
-        使用简单轮询分配策略：shape[i] 分配给 rank_id = i % num_processes 的进程
+        使用连续区间分配策略：每个rank处理一块连续的shape
         """
         print("=====STARTING GEMM BENCHMARK=====")
         
-        # 使用简单轮询分配：当前进程只处理 shape[i] 其中 i % num_processes == rank_id
-        assigned_shapes = []
-        for i, shape in enumerate(self.shape_group):
-            if i % self.num_processes == self.rank_id:
-                assigned_shapes.append(shape)
+        total_shapes = len(self.shape_group)
+        if total_shapes == 0:
+            print(f"Rank {self.rank_id} (NPU {self.npu_id}): 没有可处理的shape，直接返回")
+            return
+        
+        # 按连续区间切分shape，保证每个进程处理一段连续的数据
+        base_count = total_shapes // self.num_processes
+        remainder = total_shapes % self.num_processes
+        
+        if self.rank_id < remainder:
+            start_idx = self.rank_id * (base_count + 1)
+            end_idx = start_idx + (base_count + 1)
+        else:
+            start_idx = remainder * (base_count + 1) + (self.rank_id - remainder) * base_count
+            end_idx = start_idx + base_count
+        
+        start_idx = min(start_idx, total_shapes)
+        end_idx = min(end_idx, total_shapes)
+        assigned_shapes = self.shape_group[start_idx:end_idx]
         
         total_assigned = len(assigned_shapes)
-        print(f"Rank {self.rank_id} (NPU {self.npu_id}): 分配了 {total_assigned} 个shape")
+        print(
+            f"Rank {self.rank_id} (NPU {self.npu_id}): 分配了 {total_assigned} 个shape，区间范围 [{start_idx}, {end_idx})"
+        )
         if total_assigned:
             print(f"  分配的shape列表: {assigned_shapes[:5]}{'...' if total_assigned > 5 else ''}")
         
