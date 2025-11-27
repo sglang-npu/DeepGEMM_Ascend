@@ -18,8 +18,8 @@ class CatlassParameter:
     约束条件：
         - 各维度元素数量为 tile × 16，矩阵元素数量需考虑两次 16
         - L0C = (mTile×16) × (nTile×16) × 4 字节 ≤ 128KB
-        - L0A = (mTile×16) × (kTile×16) × double_buffer × 2 字节 ≤ 64KB
-        - L0B = (nTile×16) × (kTile×16) × double_buffer × 2 字节 ≤ 64KB
+        - L0A = (mTile×16) × (1×16) × double_buffer × 2 字节 ≤ 64KB（kTile固定为1）
+        - L0B = (nTile×16) × (1×16) × double_buffer × 2 字节 ≤ 64KB（kTile固定为1）
         - L1 = (mTile×16 + nTile×16) × kTile×16 × 2 字节 < 512KB
     """
     
@@ -40,7 +40,7 @@ class CatlassParameter:
         
         约束分析：
         1. L0C约束：mTile × nTile ≤ 64
-        2. L0A/L0B约束：mTile × kTile ≤ 64, nTile × kTile ≤ 64
+        2. L0A/L0B约束：kTile固定为1，因此 mTile ≤ 64, nTile ≤ 64
         
         """
         values = []
@@ -72,10 +72,7 @@ class CatlassParameter:
     def generate_k_tile_values(self):
         """
         生成kTile的值（范围1-64）
-        
-        约束分析：
-        1. L0A约束：mTile × kTile ≤ 64
-        2. L0B约束：nTile × kTile ≤ 64
+
         """
         values = []
         
@@ -115,8 +112,8 @@ class CatlassParameter:
         线性生成 mTile, nTile, kTile 的所有组合
         约束条件：
         1. L0C = (mTile×16) × (nTile×16) × 4 字节 ≤ 128KB
-        2. L0A = (mTile×16) × (kTile×16) × double_buffer × 2 字节 ≤ 64KB
-        3. L0B = (nTile×16) × (kTile×16) × double_buffer × 2 字节 ≤ 64KB
+        2. L0A = (mTile×16) × (1×16) × double_buffer × 2 字节 ≤ 64KB（kTile固定1）
+        3. L0B = (nTile×16) × (1×16) × double_buffer × 2 字节 ≤ 64KB（kTile固定1）
         4. L1 = (mTile×16 + nTile×16) × kTile×16 × 2 字节 x double_buffer < 512KB
         5. mTile/nTile范围：1-128，kTile范围：1-128
         """
@@ -202,8 +199,8 @@ class CatlassParameter:
         print(f'  Constraint filtering rate: {(1 - len(parameters) / (len(mn_tile_values)**2 * len(k_tile_values))) * 100:.1f}%')
         print(f'  Constraints applied:')
         print(f'    - L0C: mTile × nTile ≤ 128')
-        print(f'    - L0A: mTile × kTile ≤ 64')
-        print(f'    - L0B: nTile × kTile ≤ 64')
+        print(f'    - L0A: mTile ≤ 64 (kTile=1)')
+        print(f'    - L0B: nTile ≤ 64 (kTile=1)')
         print(f'    - L1: (mTile×16 + nTile×16) × kTile×16 × 2 < 256KB')
         print(f'=' * 60)
         
