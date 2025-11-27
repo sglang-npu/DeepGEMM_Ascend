@@ -71,7 +71,7 @@ class CatlassParameter:
     
     def generate_k_tile_values(self):
         """
-        生成kTile的值（范围1-64）
+        生成kTile的值（范围1-128）
 
         """
         values = []
@@ -96,16 +96,13 @@ class CatlassParameter:
         # 包含关键值52, 56, 60, 64
         values.extend(range(52, 65, 4))  # 52,56,60,64 (4个值)
         
+        # 超大值区域（68-128）：步长8，稀疏采样
+        # 包含关键值68, 76, 84, 92, 100, 108, 116, 124, 128
+        values.extend(range(68, 129, 8))  # 68,76,84,92,100,108,116,124,128 (9个值)
+
         # 去重并排序
         values = sorted(list(set(values)))
         return values
-    
-    def generate_tile_values(self):
-        """
-        兼容性方法：返回mTile/nTile的值（保持向后兼容）
-        新代码应该使用generate_mn_tile_values()和generate_k_tile_values()
-        """
-        return self.generate_mn_tile_values()
 
     def generate_mnk_tiles_linear(self):
         """
@@ -115,7 +112,7 @@ class CatlassParameter:
         2. L0A = (mTile×16) × (1×16) × double_buffer × 2 字节 ≤ 64KB（kTile固定1）
         3. L0B = (nTile×16) × (1×16) × double_buffer × 2 字节 ≤ 64KB（kTile固定1）
         4. L1 = (mTile×16 + nTile×16) × kTile×16 × 2 字节 x double_buffer < 512KB
-        5. mTile/nTile范围：1-128，kTile范围：1-128
+        5. mTile/nTile范围：1-64，kTile范围：1-128
         """
         mn_tile_values = self.generate_mn_tile_values()
         k_tile_values = self.generate_k_tile_values()
@@ -153,12 +150,12 @@ class CatlassParameter:
                 m_plus_n_16 = (m_tile + n_tile) * 16
                 
                 for k_tile in k_tile_values:
-                    # L0A约束：mTile * kTile <= 64
-                    if m_tile * k_tile > L0A_MAX_TILE_PRODUCT:
+                    # L0A约束：mTile * 1 <= 64
+                    if m_tile > L0A_MAX_TILE_PRODUCT:
                         continue
                     
-                    # L0B约束：nTile * kTile <= 64
-                    if n_tile * k_tile > L0B_MAX_TILE_PRODUCT:
+                    # L0B约束：nTile * 1 <= 64
+                    if n_tile > L0B_MAX_TILE_PRODUCT:
                         continue
                     
                     # L1 bytes = (mTile*16 + nTile*16) * kTile*16 * 2
@@ -211,10 +208,9 @@ class CatlassParameter:
         检查shape和tiling参数是否满足SmallMatmul算子的约束条件
         
         SmallMatmul约束条件：
-        1. Cache约束: (m1 + n1) × k1 × 2 ≤ 512KB, m1 × n1 × 4 ≤ 128KB
-        2. Tile数量: ⌈m/m1⌉ × ⌈n/n1⌉ ≤ coreNum
-        3. K轴: k ≤ k1
-        4. Padding: 通过 calc_padding_tags 模拟 C++ GetPaddingTag，要求 PaddingTagA/B/C == PADDING_NONE
+        1. Tile数量: ⌈m/m1⌉ × ⌈n/n1⌉ ≤ coreNum
+        2. K轴: k ≤ k1
+        3. Padding: 通过 calc_padding_tags 模拟 C++ GetPaddingTag，要求 PaddingTagA/B/C == PADDING_NONE
         
         Args:
             m, n, k: 矩阵维度
@@ -225,24 +221,13 @@ class CatlassParameter:
         Returns:
             bool: 是否满足SmallMatmul约束
         """
-        # 约束1: Cache约束
-        # L1约束: (m1 + n1) × k1 × 2 ≤ 512KB = 524288字节
-        l1_bytes = (m1 + n1) * k1 * 2
-        if l1_bytes > 524288:
-            return False
-        
-        # L0C约束: m1 × n1 × 4 ≤ 128KB = 131072字节
-        l0c_bytes = m1 * n1 * 4
-        if l0c_bytes > 131072:
-            return False
-        
-        # 约束2: Tile数量约束
+        # 约束1: Tile数量约束
         # ⌈m/m1⌉ × ⌈n/n1⌉ ≤ coreNum
         task_blocks = math.ceil(m / m1) * math.ceil(n / n1)
         if task_blocks > self.core_num:
             return False
         
-        # 约束3: K轴约束
+        # 约束2: K轴约束
         if k > k1:
             return False
         
@@ -274,17 +259,9 @@ class CatlassParameter:
         检查 shape 与 tiling 是否更适合 PaddingCommonMatmul
 
         要求：
-        1. Cache 约束与 SmallMatmul 保持一致，避免生成不可执行组合
-        2. 至少一个 PaddingTag ≠ PADDING_NONE，用于触发 Padding kernel
+        1. 至少一个 PaddingTag ≠ PADDING_NONE，用于触发 Padding kernel
+        2. 其余基础约束已由网格生成阶段保证
         """
-        l1_bytes = (m1 + n1) * k1 * 2
-        if l1_bytes > 524288:
-            return False
-
-        l0c_bytes = m1 * n1 * 4
-        if l0c_bytes > 131072:
-            return False
-
         padding_a, padding_b, padding_c = PaddingCalculator.calc_padding_tags(
             m,
             n,
