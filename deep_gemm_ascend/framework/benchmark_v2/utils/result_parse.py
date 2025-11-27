@@ -191,7 +191,7 @@ class ResultParse:
             op_res_dir = path_device
         op_res_dir = os.path.join(op_res_dir, op_name)
         if not os.path.isdir(op_res_dir):
-            logger.error(f"op result directory '{op_res_dir}' is not exist.")
+            logger.info(f"op result directory '{op_res_dir}' is not exist.")
             return []
         # 2、按count获取最新目录下的所有csv文件
         csv_list = []
