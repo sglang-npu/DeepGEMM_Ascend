@@ -28,21 +28,21 @@ def parse_args():
     parser.add_argument(
         "--batch-size", 
         type=int, 
-        default=2048, 
+        default=4096, 
         help="训练/验证/测试的批次大小（默认：512，需为正整数）"
     )
     parser.add_argument(
         "--features",
         type=str,
-        default="0,1,2,3,4,5,9,10,11,12,13,14,15",
-        help="默认：13个标签，M,N,K,m,n,k,MN,MK,NK,mn,mk,nk,ai core"
+        default="0,1,2,3,4,5",
+        help="默认：6个标签，M,N,K,m,n,k"
     )
 
     # -------------------------- 模型结构参数 --------------------------
     parser.add_argument(
         "--hidden-dims", 
         type=str, 
-        default="121,242,484,969,1939,969,484,242,121", 
+        default="85,171,342,684,1369,2739,1369,684,342,171,85", 
         help="隐藏层维度列表（格式：逗号分隔，如'64,32,16'，默认：64,32,12）"
     )
     
@@ -56,7 +56,7 @@ def parse_args():
     parser.add_argument(
         "--epochs", 
         type=int, 
-        default=1000, 
+        default=300, 
         help="最大训练轮次（默认：1000，需为正整数）"
     )
     parser.add_argument(
@@ -68,7 +68,7 @@ def parse_args():
     parser.add_argument(
         "--loss", 
         type=str, 
-        default="mse", 
+        default="smoothl1", 
         choices=["mse", "mae", "smoothl1"], 
         help="选择损失函数（mse:均方误差, mae:平均绝对误差, smoothl1:平滑L1损失，默认: mse）"
     )
@@ -88,6 +88,25 @@ def parse_args():
     parser.add_argument("--momentum", type=float, default=0.9, help="动量（仅SGD优化器生效，默认: 0.9）")
     parser.add_argument("--weight-decay", type=float, default=1e-5, help="权重衰减（默认: 1e-5）")
     parser.add_argument("--alpha", type=float, default=0.99, help="平滑常数（仅RMSprop生效，默认: 0.99）")
+    # -------------------------- Warmup参数 --------------------------
+    parser.add_argument(
+        "--use-warmup",
+        action="store_true", 
+        default=False, 
+        help="是否使用warmup学习率调度（默认：False）"
+    )
+    parser.add_argument(
+        "--warmup-epochs", 
+        type=int, 
+        default=None, 
+        help="Warmup阶段epoch数（默认：总epochs的10%）"
+    )
+    parser.add_argument(
+        "--warmup-start-lr",
+        type=float,
+        default=None,
+        help="Warmup起始学习率（默认：初始学习率的1%）"
+    )
     # -------------------------- 设备参数 --------------------------
     parser.add_argument(
         "--npu-id", 
@@ -135,6 +154,23 @@ def parse_args():
         raise ValueError("特征列表格式错误！需为逗号分隔的整数（如0,1,2）")
     if len(args.features)>0:
         args.input_dim = len(args.features)
+    # 设置warmup参数
+    if args.use_warmup:
+        if args.warmup_epochs is None:
+            args.warmup_epochs = max(1, int(args.epochs * 0.05))
+        if args.warmup_start_lr is None:
+            args.warmup_start_lr = args.lr * 0.001 
+        # warmup参数校验
+        if args.warmup_epochs < 0:
+            raise ValueError("warmup-epochs必须为非负整数！")
+        if args.warmup_start_lr < 0:
+            raise ValueError("warmup-start-lr必须为非负整数！")
+        if args.warmup_epochs > args.epochs:
+            raise ValueError("warmup-epochs不能超过总训练轮次！")
+    else:
+        # 如果不使用warmup,将相关参数设为0
+        args.warmup_epochs = 0
+        args.warmup_start_lr = args.lr
     return args
 
 # -------------------------- 2. 设备配置（支持指定NPU编号） --------------------------
@@ -269,7 +305,8 @@ def process_data(args):
         valid_mask = ~(
             (labels == 'inf') |
             (labels == 999999999) |
-            (labels == -1) 
+            (labels == -1) |
+            np.isnan(labels)
         )
         input_data = input_data[valid_mask]
         labels = labels[valid_mask]
@@ -482,9 +519,20 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
     counter = 0  # 早停计数器
 
     print(f"\n开始训练，共{args.epochs}轮，设备：{device}，早停耐心值：{args.patience}")
+    if args.use_warmup:
+        print(f"Warmup阶段，前{args.warmup_epochs}轮，学习率从{args.warmup_start_lr:.6f}线性增加到{args.lr:.6f}")
+    else:
+        print("Warmup已禁用")
     start_time = time.time()
     
     for epoch in range(args.epochs):
+        # 学习率调整 - 只在启用warmup时执行
+        if args.use_warmup and epoch < args.warmup_epochs:
+            warmup_ratio = (epoch + 1) / args.warmup_epochs # 线性增长
+            current_lr = args.warmup_start_lr + (args.lr - args.warmup_start_lr) * warmup_ratio
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = current_lr
+
         # 训练阶段
         model.train()
         train_loss = 0.0
@@ -520,9 +568,11 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
         val_losses.append(val_loss)
         
         # 学习率调度器
-        scheduler.step(val_loss)
+        if not args.use_warmup or epoch >= args.warmup_epochs:
+            scheduler.step(val_loss)
         
-        print(f"Epoch [{epoch+1}/{args.epochs}], 训练损失: {train_loss:.6f}, 验证损失: {val_loss:.6f}")
+        current_lr = optimizer.param_groups[0]['lr']
+        print(f"Epoch [{epoch+1}/{args.epochs}], 训练损失: {train_loss:.6f}, 验证损失: {val_loss:.6f}, 学习率：{current_lr:.6f}")
         
         # 早停逻辑（固定min_delta=1e-8）
         if val_loss < best_val_loss - 1e-8:

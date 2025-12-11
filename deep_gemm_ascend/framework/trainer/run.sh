@@ -8,12 +8,22 @@ AVAILABLE_NPUS=(0 1 2 3 4 5 6 7)    # 可用NPU列表
 TOTAL_NPUS=${#AVAILABLE_NPUS[@]}      # 可用NPU数量
 
 # -------------------------- 定义参数空间（通过for循环组合） --------------------------
-LOSSES=("mse" "smoothl1")                  # 损失函数列表
-OPTIMIZERS=("adam" "adamw")                # 优化器列表
-LEARNING_RATES=("0.005" "0.001" "0.01")    # 学习率列表
-HIDDEN_DIMS_LIST=("64,128,64" "32,64,32" "32,128,32" "64,256,64" ) # 隐藏层维度列表
-BATCH_SIZE_LIST=("128" "256" "512" "1024")       # 批次大小列表
-
+LOSSES=("smoothl1")                  # 损失函数列表 "mse" "smoothl1"
+OPTIMIZERS=("adamw")                # 优化器列表 "adam" "adamw"
+LEARNING_RATES=("0.01")    # 学习率列表 "0.005" "0.001" "0.01"
+HIDDEN_DIMS_LIST=(
+    "121,242,484,969,1939,969,484,242,121" 
+    "171,342,685,1371,2743,1371,685,342,171" 
+    "242,485,970,1940,3880,1940,970,485,242" 
+    "383,766,1533,3067,6135,3067,1533,766,383" 
+    "542,1084,2169,4338,8676,4338,2169,1084,542" 
+    "60,121,242,484,968,1937,968,484,242,121,60" 
+    "85,171,342,684,1369,2739,1369,684,342,171,85" 
+    "121,242,484,968,1937,3874,1937,968,484,242,121" 
+    "191,382,765,1531,3063,6126,3063,1531,765,382,191" 
+    "270,541,1083,2166,4332,8664,4332,2166,1083,541,270" ) # 隐藏层维度列表
+BATCH_SIZE_LIST=("2048" "4096")       # 批次大小列表 "128" "256" "512" "1024"
+FEATURES_LIST=("0,1,2,3,4,5")
 # -------------------------- 自动生成实验列表 --------------------------
 EXPERIMENT_LIST=()
 for loss in "${LOSSES[@]}"; do
@@ -21,10 +31,12 @@ for loss in "${LOSSES[@]}"; do
         for lr in "${LEARNING_RATES[@]}"; do
             for hidden_dims in "${HIDDEN_DIMS_LIST[@]}"; do
                 for batch_size in "${BATCH_SIZE_LIST[@]}"; do
-                    # 生成唯一实验名称（由参数组合构成）
-                    exp_name="loss=${loss}_opt=${optimizer}_lr=${lr}_hidden=${hidden_dims}_batch=${batch_size}"
-                    # 将实验参数作为一个整体添加到列表（用特殊分隔符|分隔参数）
-                    EXPERIMENT_LIST+=("$exp_name|$loss|$optimizer|$lr|$hidden_dims|$batch_size")
+                    for features in "${FEATURES_LIST[@]}"; do
+                        # 生成唯一实验名称（由参数组合构成）
+                        exp_name="loss=${loss}_opt=${optimizer}_lr=${lr}_hidden=${hidden_dims}_batch=${batch_size}_feature=${features}"
+                        # 将实验参数作为一个整体添加到列表（用特殊分隔符|分隔参数）
+                        EXPERIMENT_LIST+=("$exp_name|$loss|$optimizer|$lr|$hidden_dims|$batch_size|$features")
+                    done
                 done
             done
         done
@@ -72,7 +84,7 @@ for npu_id in "${AVAILABLE_NPUS[@]}"; do
             fi
             
             # 使用|作为分隔符解析参数
-            IFS='|' read -r exp_name loss optimizer lr hidden_dims batch_size <<< "$exp_entry"
+            IFS='|' read -r exp_name loss optimizer lr hidden_dims batch_size features<<< "$exp_entry"
             
             exp_unique_id="npu${npu_id}_exp${exp_seq}_${exp_name}"
             exp_dir="${BASE_OUTPUT_DIR}/${exp_unique_id}"
@@ -84,7 +96,7 @@ for npu_id in "${AVAILABLE_NPUS[@]}"; do
             
             echo "------------------------------------------------"
             echo "NPU $npu_id 实验 $((exp_seq + 1))/$exp_count: $exp_name"
-            echo "参数: loss=$loss, opt=$optimizer, lr=$lr, hidden=$hidden_dims, batch_size=$batch_size"
+            echo "参数: loss=$loss, opt=$optimizer, lr=$lr, hidden=$hidden_dims, batch_size=$batch_size, features=$features"
             echo "日志: $log_file"
             echo "开始时间: $(date +%H:%M:%S)"
             echo "------------------------------------------------"
@@ -99,6 +111,7 @@ for npu_id in "${AVAILABLE_NPUS[@]}"; do
                 --loss "$loss" \
                 --optimizer "$optimizer" \
                 --lr "$lr" \
+                --features "$features" \
                 --npu-id "$npu_id" \
                 --model-save-path "$model_save" \
                 --scaler-save-path "$scaler_save" \
