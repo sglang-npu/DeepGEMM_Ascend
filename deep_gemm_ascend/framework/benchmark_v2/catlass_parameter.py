@@ -23,14 +23,18 @@ class CatlassParameter:
         - L1 = (mTile×16 + nTile×16) × kTile×16 × 2 字节 < 512KB
     """
     
-    def __init__(self, operator_type=None, core_num=20):
+    def __init__(self, operator_type=None, core_num=20, layout_tag_a=0, layout_tag_b=0):
         """
         Args:
             operator_type: 算子类型，可选值: 'SmallMatmulKernel', 'CommonMatmulKernel', 'PaddingMatmulKernel', None(所有)
             core_num: AI Core数量，默认20
+            layout_tag_a: Layout A标签，0=RowMajor, 1=ColumnMajor，默认0
+            layout_tag_b: Layout B标签，0=RowMajor, 1=ColumnMajor，默认0
         """
         self.operator_type = operator_type
         self.core_num = core_num
+        self.layout_tag_a = layout_tag_a
+        self.layout_tag_b = layout_tag_b
         self.grid_parameters = self.grid_generate_parameters()
 
     def generate_mn_tile_values(self):
@@ -180,16 +184,7 @@ class CatlassParameter:
         Returns:
             bool: 是否满足SmallMatmul约束
         """
-        # 约束1: Tile数量约束
-        # ⌈m/m1⌉ × ⌈n/n1⌉ ≤ coreNum
-        task_blocks = math.ceil(m / m1) * math.ceil(n / n1)
-        if task_blocks > self.core_num:
-            return False
-        
-        # 约束2: K轴约束
-        if k > k1:
-            return False
-        
+        # 步骤1: 先计算 padding
         padding_a, padding_b, padding_c = PaddingCalculator.calc_padding_tags(
             m,
             n,
@@ -203,10 +198,21 @@ class CatlassParameter:
             core_num=self.core_num,
         )
 
+        # 步骤2: 检查 padding 是否都是 PADDING_NONE
         if any(
             tag != PaddingTag.PADDING_NONE
             for tag in (padding_a, padding_b, padding_c)
         ):
+            return False
+
+        # 步骤3: 如果 padding 都是 NONE，再检查其他条件
+        # 约束1: Tile数量约束 ⌈m/m1⌉ × ⌈n/n1⌉ ≤ coreNum
+        task_blocks = math.ceil(m / m1) * math.ceil(n / n1)
+        if task_blocks > self.core_num:
+            return False
+        
+        # 约束2: K轴约束 k ≤ k1
+        if k > k1:
             return False
 
         return True
@@ -237,18 +243,162 @@ class CatlassParameter:
         return any(
             tag != PaddingTag.PADDING_NONE for tag in (padding_a, padding_b, padding_c)
         )
+
+    def check_padding_multicore_splitk_constraints(
+        self, m, n, k, m1, n1, k1, layout_tag_a=0, layout_tag_b=0
+    ):
+        """
+        检查是否满足 PaddingMultiCoreSplitkMatmul 的条件
+        
+        根据 C++ 代码 PaddingMultiCoreSplitkMatmulB16Handler：
+        1. 根据 layout 确定 m1t, n1t, k1t (默认 128, 256, 256)
+        2. 计算 blocks = CeilDiv(m, m1t) * CeilDiv(n, n1t)
+        3. 根据 k 确定 maxSplitkFactor
+        4. 条件：(blocks <= coreNum/2 && k > 5120) || (blocks <= 2 && k > 1024)
+        
+        Args:
+            m, n, k: 矩阵维度
+            m1, n1, k1: 当前 tiling 参数（实际值）
+            layout_tag_a: Layout A标签 (0=RowMajor, 1=ColumnMajor)
+            layout_tag_b: Layout B标签 (0=RowMajor, 1=ColumnMajor)
+        
+        Returns:
+            bool: 是否满足 PaddingMultiCoreSplitkMatmul 条件
+        """
+        # 根据 layout 确定目标 tile 大小
+        m1t = 128
+        n1t = 256
+        k1t = 256
+        
+        # LayoutTag::TagColumnMajor = 1
+        cond1 = (layout_tag_a == 1 and layout_tag_b == 1)
+        cond2 = (layout_tag_a == 1 and layout_tag_b == 0) and (m > n)
+        if cond1 or cond2:
+            m1t = 256
+            n1t = 128
+        
+        blocks = ceil_div(m, m1t) * ceil_div(n, n1t)
+        
+        # 条件：(blocks <= coreNum/2 && k > 5120) || (blocks <= 2 && k > 1024)
+        if (blocks <= self.core_num // 2 and k > 5120) or (blocks <= 2 and k > 1024):
+            return True
+        
+        return False
+
+    def check_padding_streamk_constraints(
+        self, m, n, k, m1, n1, k1, layout_tag_a=0, layout_tag_b=0
+    ):
+        """
+        检查是否满足 PaddingStreamkMatmul 的条件
+        
+        根据 C++ 代码 PaddingStreamkMatmulB16Handler：
+        1. 根据 layout 确定 m1t, n1t, k1t (默认 128, 256, 256)
+        2. 计算 blocks = CeilDiv(m, m1t) * CeilDiv(n, n1t)
+        3. 计算 skBlocks = blocks % coreNum
+        4. 条件：blocks > coreNum && blocks < 8*coreNum && skBlocks > 0 
+                && skBlocks < 0.8*coreNum && k > 3072
+        
+        Args:
+            m, n, k: 矩阵维度
+            m1, n1, k1: 当前 tiling 参数（实际值）
+            layout_tag_a: Layout A标签 (0=RowMajor, 1=ColumnMajor)
+            layout_tag_b: Layout B标签 (0=RowMajor, 1=ColumnMajor)
+        
+        Returns:
+            bool: 是否满足 PaddingStreamkMatmul 条件
+        """
+        # 根据 layout 确定目标 tile 大小
+        m1t = 128
+        n1t = 256
+        k1t = 256
+        
+        # LayoutTag::TagColumnMajor = 1
+        cond1 = (layout_tag_a == 1 and layout_tag_b == 1)
+        cond2 = (layout_tag_a == 1 and layout_tag_b == 0) and (m > n)
+        if cond1 or cond2:
+            m1t = 256
+            n1t = 128
+        
+        blocks = ceil_div(m, m1t) * ceil_div(n, n1t)
+        sk_blocks = blocks % self.core_num
+        
+        # 条件：blocks > coreNum && blocks < 8*coreNum && skBlocks > 0 
+        #       && skBlocks < 0.8*coreNum && k > 3072
+        if (blocks > self.core_num 
+            and blocks < 8 * self.core_num 
+            and sk_blocks > 0 
+            and sk_blocks < 0.8 * self.core_num 
+            and k > 3072):
+            return True
+        
+        return False
+
+    def check_commonmatmul_constraints(
+        self, m, n, k, m1, n1, k1, layout_tag_a=0, layout_tag_b=0
+    ):
+        """
+        检查 shape 和 tiling 参数是否会被选择为 CommonMatmul 算子
+        
+        CommonMatmul 是兜底 handler，只有当所有前面的 handler 都返回 false 时才会被选择。
+        
+        选择顺序（按优先级）：
+        1. SmallMatmulB16Handler
+        2. PaddingMultiCoreSplitkMatmulB16Handler
+        3. PaddingStreamkMatmulB16Handler
+        4. PaddingCommonMatmulB16Handler
+        5. CommonMatmulB16Handler (兜底，总是返回 true)
+        
+        CommonMatmul 被选择的条件是：
+        - 不满足 SmallMatmul 条件
+        - 不满足 PaddingMultiCoreSplitkMatmul 条件
+        - 不满足 PaddingStreamkMatmul 条件
+        - 不满足 PaddingCommonMatmul 条件
+        
+        Args:
+            m, n, k: 矩阵维度
+            m1, n1, k1: Tiling参数（实际值，不是tile编号）
+            layout_tag_a: Layout A标签 (0=RowMajor, 1=ColumnMajor)
+            layout_tag_b: Layout B标签 (0=RowMajor, 1=ColumnMajor)
+        
+        Returns:
+            bool: 是否会被选择为 CommonMatmul
+        """
+        # 检查是否满足 SmallMatmul 条件
+        if self.check_smallmatmul_constraints(m, n, k, m1, n1, k1, layout_tag_a, layout_tag_b):
+            return False
+        
+        # 检查是否满足 PaddingMultiCoreSplitkMatmul 条件
+        if self.check_padding_multicore_splitk_constraints(m, n, k, m1, n1, k1, layout_tag_a, layout_tag_b):
+            return False
+        
+        # 检查是否满足 PaddingStreamkMatmul 条件
+        if self.check_padding_streamk_constraints(m, n, k, m1, n1, k1, layout_tag_a, layout_tag_b):
+            return False
+        
+        # 检查是否满足 PaddingCommonMatmul 条件
+        if self.check_paddingmatmul_constraints(m, n, k, m1, n1, k1, layout_tag_a, layout_tag_b):
+            return False
+        
+        # 所有前面的 handler 都不满足，会被选择为 CommonMatmul
+        return True
     
-    def filter_parameters(self, shape):
+    def filter_parameters(self, shape, layout_tag_a=None, layout_tag_b=None):
         """
         根据shape和算子类型过滤参数
         
         Args:
             shape: [m, n, k] 矩阵维度
+            layout_tag_a: Layout A标签，0=RowMajor, 1=ColumnMajor，如果为None则使用默认值0
+            layout_tag_b: Layout B标签，0=RowMajor, 1=ColumnMajor，如果为None则使用默认值0
         
         Returns:
             过滤后的参数列表
         """
         m, n, k = shape[0], shape[1], shape[2]
+        
+        # 使用传入的 layout_tag 或默认值 0, 0
+        layout_a = layout_tag_a if layout_tag_a is not None else 0
+        layout_b = layout_tag_b if layout_tag_b is not None else 0
         
         # 如果没有指定算子类型，返回所有参数组合
         if self.operator_type is None:
@@ -265,14 +415,12 @@ class CatlassParameter:
                 n1 = param['nTile'] * 16
                 k1 = param['kTile'] * 16
                 
-                # 检查是否满足SmallMatmul约束
-                # 默认使用RowMajor布局（layout_tag_a=0, layout_tag_b=0）
-                # 注意：如果需要支持其他layout组合，可以在这里循环检查所有组合
-                if self.check_smallmatmul_constraints(m, n, k, m1, n1, k1, 0, 0):
+                # 检查是否满足SmallMatmul约束，使用指定的layout_tag
+                if self.check_smallmatmul_constraints(m, n, k, m1, n1, k1, layout_a, layout_b):
                     filtered_params.append(param)
             
             if len(filtered_params) == 0:
-                print(f"Warning: No valid tiling parameters found for SmallMatmul with shape {shape}")
+                print(f"Warning: No valid tiling parameters found for SmallMatmul with shape {shape}, layout_a={layout_a}, layout_b={layout_b}")
             
             return filtered_params
         elif operator_type_lower == 'paddingmatmulkernel':
@@ -283,28 +431,50 @@ class CatlassParameter:
                 k1 = param['kTile'] * 16
 
                 if self.check_paddingmatmul_constraints(
-                    m, n, k, m1, n1, k1, 0, 0
+                    m, n, k, m1, n1, k1, layout_a, layout_b
                 ):
                     filtered_params.append(param)
 
             if len(filtered_params) == 0:
                 print(
-                    f"Warning: No valid tiling parameters found for {self.operator_type} with shape {shape}"
+                    f"Warning: No valid tiling parameters found for {self.operator_type} with shape {shape}, layout_a={layout_a}, layout_b={layout_b}"
                 )
 
             return filtered_params
         elif operator_type_lower == 'commonmatmulkernel':
-            return self.grid_parameters
+            filtered_params = []
+            for param in self.grid_parameters:
+                m1 = param['mTile'] * 16
+                n1 = param['nTile'] * 16
+                k1 = param['kTile'] * 16
+                
+                # 检查是否会被选择为 CommonMatmul，使用指定的layout_tag
+                if self.check_commonmatmul_constraints(m, n, k, m1, n1, k1, layout_a, layout_b):
+                    filtered_params.append(param)
+            
+            if len(filtered_params) == 0:
+                print(f"Warning: No valid tiling parameters found for CommonMatmul with shape {shape}, layout_a={layout_a}, layout_b={layout_b}")
+            
+            return filtered_params
         else:
             # 未知的算子类型，返回所有参数
             print(f"Warning: Unknown operator type '{self.operator_type}', returning all parameters")
             return self.grid_parameters
 
-    def get_params_with_idx(self, shape, idx):
+    def get_params_with_idx(self, shape, idx, layout_tag_a=None, layout_tag_b=None):
         """
         根据索引获取特定shape的参数
+        
+        Args:
+            shape: [m, n, k] 矩阵维度
+            idx: 参数索引
+            layout_tag_a: Layout A标签，0=RowMajor, 1=ColumnMajor，如果为None则使用默认值0
+            layout_tag_b: Layout B标签，0=RowMajor, 1=ColumnMajor，如果为None则使用默认值0
+        
+        Returns:
+            指定索引的参数字典
         """
-        params = self.filter_parameters(shape)
+        params = self.filter_parameters(shape, layout_tag_a, layout_tag_b)
         if idx >= len(params):
             raise IndexError(f"Index {idx} out of range for {len(params)} parameters")
         return params[idx]
