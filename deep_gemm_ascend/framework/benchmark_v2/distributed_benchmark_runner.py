@@ -8,7 +8,6 @@ import os
 import math
 import csv
 import shutil
-import random
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any
 
@@ -20,44 +19,6 @@ from .file_io import CheckpointManager, ResultWriter
 from .utils.msprof_executor import MsProfExecutor
 from .utils.result_parse import ResultParse
 from .utils.logger import logger
-
-
-def generate_qwen3_shapes() -> List[List[int]]:
-    """
-    生成Qwen3相关的shape列表
-    
-    生成规则：
-    - shape模板：[M, 4096, 4096], [M, 6144, 4096], [M, 24576, 4096], [M, 4096, 12288]
-    - M从极小值、小值、中等值、大值、超大值各取一个
-    - 共生成4个模板 × 5个M值 = 20个shape
-    
-    Returns:
-        Qwen3 shape列表，共20个shape
-    """
-    # 定义5个M值级别
-    m_values = {
-        '极小值': 8,
-        '小值': 256,
-        '中等值': 2048,
-        '大值': 16384,
-        '超大值': 131072
-    }
-    
-    # 定义4个shape模板
-    shape_templates = [
-        [None, 4096, 4096],   # [M, 4096, 4096]
-        [None, 6144, 4096],   # [M, 6144, 4096]
-        [None, 24576, 4096],  # [M, 24576, 4096]
-        [None, 4096, 12288],  # [M, 4096, 12288]
-    ]
-    
-    qwen3_shapes = []
-    for m_label, m_value in m_values.items():
-        for template in shape_templates:
-            shape = [m_value, template[1], template[2]]
-            qwen3_shapes.append(shape)
-    
-    return qwen3_shapes
 
 
 class GEMMBenchmarkRunner:
@@ -73,7 +34,9 @@ class GEMMBenchmarkRunner:
         result_dir: str = "./results", 
         msp_dir: str = "./msp", 
         operator_type: str = None, 
-        core_num: int = 20
+        core_num: int = 20,
+        layout_tag_a: int = 0,
+        layout_tag_b: int = 0
     ):
         """
         初始化基准测试运行器
@@ -88,6 +51,8 @@ class GEMMBenchmarkRunner:
             msp_dir: msprof输出目录
             operator_type: 算子类型
             core_num: AI Core数量
+            layout_tag_a: Layout A标签，0=RowMajor, 1=ColumnMajor，默认0
+            layout_tag_b: Layout B标签，0=RowMajor, 1=ColumnMajor，默认0
         """
         self.shape_group = shape_group
         self.result_dir = result_dir
@@ -95,13 +60,20 @@ class GEMMBenchmarkRunner:
         self.npu_ids = npu_ids
         self.num_processes = num_processes
         self.operator_type = operator_type
+        self.layout_tag_a = layout_tag_a
+        self.layout_tag_b = layout_tag_b
         self.checkpoint_interval = 10
         
         # 从npu_ids列表获取当前进程对应的NPU ID
         self.npu_id = npu_ids[rank_id]
         
         # 依赖注入：创建各个组件
-        self.parameters = CatlassParameter(operator_type=operator_type, core_num=core_num)
+        self.parameters = CatlassParameter(
+            operator_type=operator_type, 
+            core_num=core_num,
+            layout_tag_a=layout_tag_a,
+            layout_tag_b=layout_tag_b
+        )
         
         # 为每个进程创建独立的msp目录，避免多进程冲突
         self.rank_msp_dir = os.path.join(msp_dir, f"npu_{self.npu_id}")
@@ -159,23 +131,27 @@ class GEMMBenchmarkRunner:
         """
         all_kernels = [
             "SmallMatmulKernelHalfLayout00",
+            "SmallMatmulKernelHalfLayout01",
             "CommonMatmulKernelHalfLayout00",
+            "CommonMatmulKernelHalfLayout01",
             "PaddingMatmulKernelHalfLayout00Padding030",
             "PaddingMatmulKernelHalfLayout00Padding300",
             "PaddingMatmulKernelHalfLayout00Padding330",
+            "PaddingStreamkMatmulKernelHalfLayout01",
         ]
         
         if operator_type is None:
             return all_kernels
         elif operator_type == 'SmallMatmulKernel':
-            return ["SmallMatmulKernelHalfLayout00"]
+            return ["SmallMatmulKernelHalfLayout00", "SmallMatmulKernelHalfLayout01"]
         elif operator_type == 'CommonMatmulKernel':
-            return ["CommonMatmulKernelHalfLayout00"]
+            return ["CommonMatmulKernelHalfLayout00", "CommonMatmulKernelHalfLayout01"]
         elif operator_type == 'PaddingMatmulKernel':
             return [
                 "PaddingMatmulKernelHalfLayout00Padding030",
                 "PaddingMatmulKernelHalfLayout00Padding300",
                 "PaddingMatmulKernelHalfLayout00Padding330",
+                "PaddingStreamkMatmulKernelHalfLayout01",
             ]
         else:
             return all_kernels
@@ -193,8 +169,8 @@ class GEMMBenchmarkRunner:
         
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            # 写入表头
-            writer.writerow(['M', 'N', 'K', 'mTile', 'nTile', 'kTile', 'None'])
+            # 写入表头：添加layoutA和layoutB列，保留None列
+            writer.writerow(['M', 'N', 'K', 'mTile', 'nTile', 'kTile', 'layoutA', 'layoutB', 'None'])
             # 写入数据行
             for params in filter_params:
                 writer.writerow([
@@ -204,6 +180,8 @@ class GEMMBenchmarkRunner:
                     params['mTile'],
                     params['nTile'],
                     params['kTile'],
+                    self.layout_tag_a,  # layoutA
+                    self.layout_tag_b,  # layoutB
                     'None'
                 ])
     
@@ -300,7 +278,6 @@ class GEMMBenchmarkRunner:
                 return None
             return mid
 
-        # 构建program命令：二进制bin路径 NPU卡号 mode(默认2) 指定shape的tiling csv文件 起始index 终止index 是否检查精度（默认0）
         program = f"{self.catlass_bin_path} {self.npu_id} 2 {csv_path} {start_idx} {end_idx} 0"
         
         # 根据 span 动态设置 launch-count 和 timeout（timeout = 6 * span）
@@ -409,7 +386,11 @@ class GEMMBenchmarkRunner:
         checkpoint_path = str(Path(self.result_dir) / checkpoint_filename)
         
         # 获取该shape的所有有效tiling参数组合
-        filter_params = self.parameters.filter_parameters(shape)
+        filter_params = self.parameters.filter_parameters(
+            shape, 
+            layout_tag_a=self.layout_tag_a, 
+            layout_tag_b=self.layout_tag_b
+        )
         
         # 输出筛选信息
         if self.operator_type:
@@ -452,13 +433,25 @@ class GEMMBenchmarkRunner:
         progress_desc = f"Rank {self.rank_id} (NPU {self.npu_id}) Shape [{shape_order}/{total_shapes}]"
         
         # 根据shape大小动态调整初始跨度，避免大shape时NPU显存占满导致超时
-        # 如果 M * N * K > 10^10，初始跨度减为50，否则使用100
+        # 基于计算量的档位设置，计算量越大，初始跨度越小
         m, n, k = shape[0], shape[1], shape[2]
-        shape_size = m * n * k
-        if shape_size > 10 ** 10:
-            initial_span = 50
-        else:
-            initial_span = 100
+        computation_size = m * n * k
+        
+        # 根据计算量分档，设置初始跨度
+        if computation_size < 1e8:  # < 100M
+            initial_span = 200  # 小shape：200条/批
+        elif computation_size < 1e9:  # < 1B
+            initial_span = 100  # 中shape：100条/批
+        elif computation_size < 1e10:  # < 10B
+            initial_span = 50  # 大shape：50条/批
+        elif computation_size < 1e11:  # < 100B
+            initial_span = 20  # 超大shape：20条/批
+        elif computation_size < 1e12:  # < 1T
+            initial_span = 10  # 极大shape：10条/批
+        else:  # >= 1T
+            initial_span = 5  # 特大shape：5条/批
+        
+        logger.debug(f"Shape {shape}, computation_size={computation_size:.2e}, initial_span={initial_span}")
         
         with tqdm(
             total=process_task_count,
@@ -547,9 +540,6 @@ class GEMMBenchmarkRunner:
         """
         运行分配给当前进程的shape的基准测试
         
-        使用随机打乱+区间分配策略：
-        1. 先随机打乱shape列表（使用固定随机种子，确保所有进程使用相同的打乱顺序）
-        2. 然后根据start_idx和end_idx分配给每个进程一部分shape
         """
         print("=====STARTING GEMM BENCHMARK=====")
         
@@ -558,22 +548,7 @@ class GEMMBenchmarkRunner:
             print(f"Rank {self.rank_id} (NPU {self.npu_id}): 没有可处理的shape，直接返回")
             return
         
-        # 先随机打乱shape列表（使用固定随机种子，确保所有进程使用相同的打乱顺序）
-        shuffled_shapes = self.shape_group.copy()
-        random.seed(42)  # 使用固定种子，确保所有进程得到相同的打乱顺序
-        random.shuffle(shuffled_shapes)
-        print(f"Rank {self.rank_id} (NPU {self.npu_id}): 已随机打乱shape列表（随机种子=42）")
-        
-        # 生成Qwen3 shape并添加到最前面
-        qwen3_shapes = generate_qwen3_shapes()
-        shuffled_shapes = qwen3_shapes + shuffled_shapes
-        print(f"Rank {self.rank_id} (NPU {self.npu_id}): 已添加 {len(qwen3_shapes)} 个Qwen3 shape到最前面")
-        print(f"Rank {self.rank_id} (NPU {self.npu_id}): Qwen3 shape列表: {qwen3_shapes[:5]}{'...' if len(qwen3_shapes) > 5 else ''}")
-        
-        # 更新total_shapes，因为添加了Qwen3 shapes
-        total_shapes = len(shuffled_shapes)
-        
-        # 按连续区间切分打乱后的shape，保证每个进程处理一段连续的数据
+        # 按连续区间切分shape_group，保证每个进程处理一段连续的数据
         base_count = total_shapes // self.num_processes
         remainder = total_shapes % self.num_processes
         
@@ -586,7 +561,7 @@ class GEMMBenchmarkRunner:
         
         start_idx = min(start_idx, total_shapes)
         end_idx = min(end_idx, total_shapes)
-        assigned_shapes = shuffled_shapes[start_idx:end_idx]
+        assigned_shapes = self.shape_group[start_idx:end_idx]
         
         total_assigned = len(assigned_shapes)
         print(

@@ -6,7 +6,7 @@ Catlass GEMM基准测试主入口
 
 import argparse
 
-from .file_io import load_shapes_from_excel, default_shape_group
+from .file_io import load_shapes_from_excel, default_shape_group, prepare_shapes_with_qwen3, filter_common_matmul_shapes
 from .distributed_benchmark_runner import GEMMBenchmarkRunner
 
 
@@ -19,15 +19,15 @@ def main():
     parser.add_argument('--process_num', required=True, type=int, help='总进程数')
     parser.add_argument('--npu_ids', type=str, required=True,
                        help='NPU设备ID列表，用逗号分隔（如: 0,1,2,3），数量必须与process_num一致')
-    parser.add_argument('--catlass_bin_path', type=str, default="/home/q30063557/code/cutlass/21_dynamic_tiling_matmul",
+    parser.add_argument('--catlass_bin_path', type=str, default="/home/q30063557/code/catlass/21_dynamic_tiling_matmul_with_layout",
                        help='catlass可执行文件路径')
     parser.add_argument('--result_dir', type=str, default="./catlass_results",
                        help='结果保存目录，默认: ./catlass_results')
     parser.add_argument('--msp_dir', type=str, default="./catlass_msp",
                        help='msprof输出目录，默认: ./catlass_msp')
     parser.add_argument('--operator_type', type=str, default=None,
-                       choices=['SmallMatmulKernel', 'PaddingMatmulKernel', 'PaddingCommonMatmulKernel'],
-                       help='算子类型，可选: SmallMatmulKernel, PaddingMatmulKernel, PaddingCommonMatmulKernel. 默认None表示所有算子')
+                       choices=['SmallMatmulKernel', 'CommonMatmulKernel', 'PaddingMatmulKernel', 'PaddingCommonMatmulKernel'],
+                       help='算子类型，可选: SmallMatmulKernel, CommonMatmulKernel, PaddingMatmulKernel, PaddingCommonMatmulKernel. 默认None表示所有算子')
     parser.add_argument('--core_num', type=int, default=20,
                        help='AI Core数量，默认20')
     parser.add_argument('--shapes_file', type=str, default=None,
@@ -72,7 +72,8 @@ def main():
         )
     else:
         print(f"=====Using default shape_group=====")
-        shape_group = default_shape_group
+        # 对default_shape_group也进行打乱、插入qwen3_shapes和切片处理
+        shape_group = prepare_shapes_with_qwen3(default_shape_group, args.start_idx, args.end_idx)
     
     print(f"=====STARTING GEMM BENCHMARK (Rank {args.rank_id}/{args.process_num}, NPU ID: {npu_id})=====")
     print(f"Total shapes to test: {len(shape_group)}")
@@ -80,6 +81,10 @@ def main():
     if args.operator_type:
         print(f"Operator type: {args.operator_type}")
         print(f"Core number: {args.core_num}")
+    
+    # 获取layout参数（从命令行参数或Excel筛选条件）
+    layout_a = args.layout_tag_a if (args.layout_tag_a is not None and args.layout_tag_a >= 0) else 0
+    layout_b = args.layout_tag_b if (args.layout_tag_b is not None and args.layout_tag_b >= 0) else 0
     
     # 运行完整基准测试
     runner = GEMMBenchmarkRunner(
@@ -91,7 +96,9 @@ def main():
         result_dir=args.result_dir,
         msp_dir=args.msp_dir,
         operator_type=args.operator_type,
-        core_num=args.core_num
+        core_num=args.core_num,
+        layout_tag_a=layout_a,
+        layout_tag_b=layout_b
     )
     runner.run_benchmarks()    
     print(f"=====GEMM BENCHMARK FINISHED (Rank {args.rank_id}, NPU ID: {npu_id})=====")

@@ -171,10 +171,10 @@ python -m framework.benchmark_v2.jsonl2excel \
 
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
-| `--catlass_bin_path` | `/home/q30063557/code/cutlass/21_dynamic_tiling_matmul` | Catlass 可执行文件路径 |
+| `--catlass_bin_path` | `/home/q30063557/code/catlass/21_dynamic_tiling_matmul_with_layout` | Catlass 可执行文件路径 |
 | `--result_dir` | `./catlass_results` | 结果保存目录 |
 | `--msp_dir` | `./catlass_msp` | msprof 输出目录 |
-| `--operator_type` | `None` | 算子类型：`SmallMatmulKernel` / `PaddingMatmulKernel` / `PaddingCommonMatmulKernel` |
+| `--operator_type` | `None` | 算子类型：`SmallMatmulKernel` / `CommonMatmulKernel` / `PaddingMatmulKernel` / `PaddingCommonMatmulKernel` |
 | `--core_num` | `20` | AI Core 数量 |
 | `--shapes_file` | `None` | shapes.xlsx 文件路径，不提供则使用默认 shape_group |
 | `--layout_tag_a` | `None` | 从 shapes_file 读取时筛选的 LayoutTagA（默认 0，传入负值代表不过滤） |
@@ -239,7 +239,7 @@ python -m framework.benchmark_v2.jsonl2excel \
 | `PaddingMatmulKernel` / `PaddingCommonMatmulKernel` | 缓存约束 + 至少一个 PaddingTag 非 `NONE` |
 
 ### 参数生成
-- 默认生成约 300~1000 个有效组合（受约束限制）
+- 默认生成约 300~500 个有效组合（受约束限制）
 - `filter_parameters(shape)` 根据 `operator_type` 自动筛选
 - `mTile` / `nTile` / `kTile` 范围：1-64，采样密度优化
 
@@ -266,3 +266,5 @@ python -m framework.benchmark_v2.jsonl2excel \
 - `execution_simulation.md`：完整的批量/异常执行推演
 - `distributed_benchmark_runner.py`：批量执行与递归拆分实现
 - `jsonl2excel.py`：结果加工脚本
+
+欢迎根据业务需求扩展脚本，并持续在 README 补充实践经验。
