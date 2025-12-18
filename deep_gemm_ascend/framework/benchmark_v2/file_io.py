@@ -6,6 +6,7 @@
 
 import os
 import json
+import random
 from pathlib import Path
 from typing import List, Optional
 from dataclasses import asdict
@@ -13,6 +14,136 @@ from dataclasses import asdict
 import pandas as pd
 
 from .models import CatlassResult
+
+# CommonMatmulKernel的shape约束常量
+COMMON_MATMUL_MAX_N = 50000
+COMMON_MATMUL_MAX_K = 50000
+
+
+def filter_common_matmul_shapes(shapes: List[List[int]], operator_name: Optional[str] = None) -> List[List[int]]:
+    """
+    根据算子类型筛选shape，如果是CommonMatmulKernel则筛选N<=5W, K<=5W
+    
+    Args:
+        shapes: 原始shape列表
+        operator_name: 算子名称（可选）
+        
+    Returns:
+        筛选后的shape列表
+    """
+    if not operator_name or operator_name.lower() != 'commonmatmulkernel':
+        return shapes
+    
+    filtered_shapes = []
+    filtered_count = 0
+    for shape in shapes:
+        m, n, k = shape[0], shape[1], shape[2]
+        if n > COMMON_MATMUL_MAX_N or k > COMMON_MATMUL_MAX_K:
+            filtered_count += 1
+            continue
+        filtered_shapes.append(shape)
+    
+    if filtered_count:
+        print(f"[filter_common_matmul_shapes] 已剔除 CommonMatmulKernel 不满足约束 (N>{COMMON_MATMUL_MAX_N} 或 K>{COMMON_MATMUL_MAX_K}) 的 shape 数量: {filtered_count}")
+    
+    return filtered_shapes
+
+
+def generate_qwen3_shapes() -> List[List[int]]:
+    """
+    生成Qwen3相关的shape列表
+    
+    生成规则：
+    - shape模板：[M, 4096, 4096], [M, 6144, 4096], [M, 24576, 4096], [M, 4096, 12288]
+    - M从极小值、小值、中等值、大值、超大值各取一个
+    - 共生成4个模板 × 5个M值 = 20个shape
+    
+    Returns:
+        Qwen3 shape列表，共20个shape
+    """
+    # 定义5个M值级别
+    m_values = {
+        '极小值': 8,
+        '小值': 30,
+        '中等值': 800,
+        '大值': 3000,
+        '超大值': 10000
+    }
+    
+    # 定义4个shape模板
+    shape_templates = [
+        [None, 4096, 4096],   # [M, 4096, 4096]
+        [None, 6144, 4096],   # [M, 6144, 4096]
+        [None, 24576, 4096],  # [M, 24576, 4096]
+        [None, 4096, 12288],  # [M, 4096, 12288]
+    ]
+    
+    qwen3_shapes = []
+    for m_label, m_value in m_values.items():
+        for template in shape_templates:
+            shape = [m_value, template[1], template[2]]
+            qwen3_shapes.append(shape)
+    
+    return qwen3_shapes
+
+
+def prepare_shapes_with_qwen3(
+    shapes: List[List[int]],
+    start_idx: Optional[int] = None,
+    end_idx: Optional[int] = None
+) -> List[List[int]]:
+    """
+    对shapes进行打乱、插入qwen3_shapes和切片处理
+    
+    Args:
+        shapes: 原始shape列表
+        start_idx: 切片起始位置（可选，从0开始，包含该位置）
+        end_idx: 切片结束位置（可选，不包含该位置，None表示到末尾）
+        
+    Returns:
+        处理后的shape列表（打乱、插入qwen3_shapes、切片后）
+    """
+    # 先随机打乱shape列表（使用固定随机种子，确保所有进程使用相同的打乱顺序）
+    shuffled_shapes = shapes.copy()
+    random.seed(42)  # 使用固定种子，确保所有进程得到相同的打乱顺序
+    random.shuffle(shuffled_shapes)
+    print(f"[prepare_shapes_with_qwen3] 已随机打乱shape列表（随机种子=42），打乱后数量: {len(shuffled_shapes)}")
+    
+    # 生成Qwen3 shapes并插入到最前面
+    qwen3_shapes = generate_qwen3_shapes()
+    shapes = qwen3_shapes + shuffled_shapes
+    print(f"[prepare_shapes_with_qwen3] 已添加 {len(qwen3_shapes)} 个Qwen3 shape到最前面，总数量: {len(shapes)}")
+    
+    # 对打乱并插入qwen3_shapes后的shapes进行切片（如果提供了start_idx或end_idx）
+    # start_idx和end_idx是全局索引，指的是在整个列表（包含qwen3_shapes）中的位置
+    total_shapes = len(shapes)
+    if start_idx is not None or end_idx is not None:
+        # 检查并设置start_idx
+        if start_idx is None:
+            start_idx = 0
+        elif start_idx < 0:
+            raise ValueError(f"start_idx ({start_idx}) 必须 >= 0")
+        elif start_idx >= total_shapes:
+            raise ValueError(f"start_idx ({start_idx}) 超出范围 [0, {total_shapes-1}]")
+        
+        # 检查并设置end_idx
+        if end_idx is None:
+            end_idx = total_shapes
+        elif end_idx < 0:
+            raise ValueError(f"end_idx ({end_idx}) 必须 >= 0")
+        elif end_idx > total_shapes:
+            raise ValueError(f"end_idx ({end_idx}) 超出范围 [0, {total_shapes}]")
+        
+        # 检查start_idx < end_idx
+        if start_idx >= end_idx:
+            raise ValueError(f"start_idx ({start_idx}) 必须 < end_idx ({end_idx})")
+        
+        # 执行切片
+        shapes = shapes[start_idx:end_idx]
+        print(f"[prepare_shapes_with_qwen3] 切片: [{start_idx}:{end_idx}], 总数量: {total_shapes}, 切片后数量: {len(shapes)}")
+    
+    return shapes
+
 
 # 默认shape组（如果未提供shapes.xlsx文件则使用）
 default_shape_group = [
@@ -131,33 +262,11 @@ def load_shapes_from_excel(
         if filtered_n1:
             print(f"[load_shapes_from_excel] 已额外剔除 N == 1 的 shape 数量: {filtered_n1}")
         
-        # 对筛选后的shapes进行切片（如果提供了start_idx或end_idx）
-        if start_idx is not None or end_idx is not None:
-            total_shapes = len(shapes)
-            
-            # 检查并设置start_idx
-            if start_idx is None:
-                start_idx = 0
-            elif start_idx < 0:
-                raise ValueError(f"start_idx ({start_idx}) 必须 >= 0")
-            elif start_idx >= total_shapes:
-                raise ValueError(f"start_idx ({start_idx}) 超出范围 [0, {total_shapes-1}]")
-            
-            # 检查并设置end_idx
-            if end_idx is None:
-                end_idx = total_shapes
-            elif end_idx < 0:
-                raise ValueError(f"end_idx ({end_idx}) 必须 >= 0")
-            elif end_idx > total_shapes:
-                raise ValueError(f"end_idx ({end_idx}) 超出范围 [0, {total_shapes}]")
-            
-            # 检查start_idx < end_idx
-            if start_idx >= end_idx:
-                raise ValueError(f"start_idx ({start_idx}) 必须 < end_idx ({end_idx})")
-            
-            # 执行切片
-            shapes = shapes[start_idx:end_idx]
-            print(f"[load_shapes_from_excel] 切片: [{start_idx}:{end_idx}], 筛选后总数: {total_shapes}, 切片后数量: {len(shapes)}")
+        # CommonMatmulKernel的shape约束筛选
+        shapes = filter_common_matmul_shapes(shapes, operator_name)
+        
+        # 使用统一的处理函数：打乱、插入qwen3_shapes、切片
+        shapes = prepare_shapes_with_qwen3(shapes, start_idx, end_idx)
         
         print(f"[load_shapes_from_excel] 成功提取 {len(shapes)} 个shape")
         if len(shapes) > 0:
