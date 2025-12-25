@@ -90,7 +90,8 @@ def generate_qwen3_shapes() -> List[List[int]]:
 def prepare_shapes_with_qwen3(
     shapes: List[List[int]],
     start_idx: Optional[int] = None,
-    end_idx: Optional[int] = None
+    end_idx: Optional[int] = None,
+    add_qwen3_shapes: bool = False
 ) -> List[List[int]]:
     """
     对shapes进行打乱、插入qwen3_shapes和切片处理
@@ -99,6 +100,7 @@ def prepare_shapes_with_qwen3(
         shapes: 原始shape列表
         start_idx: 切片起始位置（可选，从0开始，包含该位置）
         end_idx: 切片结束位置（可选，不包含该位置，None表示到末尾）
+        add_qwen3_shapes: 是否添加qwen3_shapes到最前面，默认False
         
     Returns:
         处理后的shape列表（打乱、插入qwen3_shapes、切片后）
@@ -109,10 +111,14 @@ def prepare_shapes_with_qwen3(
     random.shuffle(shuffled_shapes)
     print(f"[prepare_shapes_with_qwen3] 已随机打乱shape列表（随机种子=42），打乱后数量: {len(shuffled_shapes)}")
     
-    # 生成Qwen3 shapes并插入到最前面
-    qwen3_shapes = generate_qwen3_shapes()
-    shapes = qwen3_shapes + shuffled_shapes
-    print(f"[prepare_shapes_with_qwen3] 已添加 {len(qwen3_shapes)} 个Qwen3 shape到最前面，总数量: {len(shapes)}")
+    # 根据参数决定是否生成Qwen3 shapes并插入到最前面
+    if add_qwen3_shapes:
+        qwen3_shapes = generate_qwen3_shapes()
+        shapes = qwen3_shapes + shuffled_shapes
+        print(f"[prepare_shapes_with_qwen3] 已添加 {len(qwen3_shapes)} 个Qwen3 shape到最前面，总数量: {len(shapes)}")
+    else:
+        shapes = shuffled_shapes
+        print(f"[prepare_shapes_with_qwen3] 未添加Qwen3 shape，总数量: {len(shapes)}")
     
     # 对打乱并插入qwen3_shapes后的shapes进行切片（如果提供了start_idx或end_idx）
     # start_idx和end_idx是全局索引，指的是在整个列表（包含qwen3_shapes）中的位置
@@ -265,8 +271,11 @@ def load_shapes_from_excel(
         # CommonMatmulKernel的shape约束筛选
         shapes = filter_common_matmul_shapes(shapes, operator_name)
         
+        # 判断是否为CommonMatmulKernel算子，只有Common算子才添加qwen3_shapes
+        is_common_matmul = operator_name and operator_name.lower() == 'commonmatmulkernel'
+        
         # 使用统一的处理函数：打乱、插入qwen3_shapes、切片
-        shapes = prepare_shapes_with_qwen3(shapes, start_idx, end_idx)
+        shapes = prepare_shapes_with_qwen3(shapes, start_idx, end_idx, add_qwen3_shapes=is_common_matmul)
         
         print(f"[load_shapes_from_excel] 成功提取 {len(shapes)} 个shape")
         if len(shapes) > 0:
