@@ -235,7 +235,8 @@ class GEMMBenchmarkRunner:
         csv_path: str, 
         start_idx: int, 
         end_idx: int, 
-        span: int
+        span: int,
+        shape: Optional[List[int]] = None
     ) -> List[Tuple]:
         """
         递归执行批量任务，如果异常则缩小跨度重试
@@ -280,10 +281,40 @@ class GEMMBenchmarkRunner:
 
         program = f"{self.catlass_bin_path} {self.npu_id} 2 {csv_path} {start_idx} {end_idx} 0"
         
-        # 根据 span 动态设置 launch-count 和 timeout（timeout = 6 * span）
+        # 根据 span 动态设置 launch-count
         effective_span = span if span > 0 else expected_count
         effective_span = max(1, min(effective_span, expected_count))
-        dynamic_timeout = max(1, 6 * effective_span)
+        
+        # 根据计算量（M * N * K）和span动态计算超时时间
+        # 基于规则的档位设置，参考：[1000,1000,1000] 单条超时时间为3秒
+        if shape is not None and len(shape) >= 3:
+            m, n, k = shape[0], shape[1], shape[2]
+            computation_size = m * n * k
+            
+            # 根据计算量分档，设置单条超时时间
+            if computation_size < 1e8:  # < 100M
+                base_timeout_per_item = 2  # 小shape：2秒/条
+            elif computation_size < 1e9:  # < 1B
+                base_timeout_per_item = 3  # 中shape：3秒/条（参考值：[1000,1000,1000]）
+            elif computation_size < 1e10:  # < 10B
+                base_timeout_per_item = 5  # 大shape：5秒/条
+            elif computation_size < 1e11:  # < 100B
+                base_timeout_per_item = 10  # 超大shape：10秒/条
+            elif computation_size < 1e12:  # < 1T
+                base_timeout_per_item = 20  # 极大shape：20秒/条
+            else:  # >= 1T
+                base_timeout_per_item = 30  # 特大shape：30秒/条
+            
+            # 批次超时时间 = 单条超时时间 * 批次大小 * 批次因子
+            # 批次因子考虑批次执行的开销，默认1.2（即增加20%的缓冲）
+            batch_factor = 1.2
+            dynamic_timeout = max(5, int(base_timeout_per_item * effective_span * batch_factor))
+            
+            logger.debug(f"Shape {shape}, computation_size={computation_size:.2e}, span={effective_span}, "
+                        f"base_timeout_per_item={base_timeout_per_item}s, timeout={dynamic_timeout}s")
+        else:
+            # 如果没有shape信息，回退到原来的计算方式
+            dynamic_timeout = max(1, 6 * effective_span)
 
         # 执行msprof命令
         output = self.msprof_executor.process(
@@ -310,9 +341,9 @@ class GEMMBenchmarkRunner:
                 return [("", -1, -1, -1, -1) for _ in range(expected_count)]
             
             # 递归处理前半部分（传入new_span以继续缩小）
-            results_part1 = self._execute_with_span_reduction(csv_path, start_idx, mid_idx, new_span)
+            results_part1 = self._execute_with_span_reduction(csv_path, start_idx, mid_idx, new_span, shape)
             # 递归处理后半部分（传入new_span以继续缩小）
-            results_part2 = self._execute_with_span_reduction(csv_path, mid_idx, end_idx, new_span)
+            results_part2 = self._execute_with_span_reduction(csv_path, mid_idx, end_idx, new_span, shape)
             
             # 合并结果（现在两部分都不会是None，都会返回列表）
             return results_part1 + results_part2
@@ -334,8 +365,8 @@ class GEMMBenchmarkRunner:
                         error_msg = f"Rank {self.rank_id} (NPU {self.npu_id}) 解析返回None但无法拆分区间 [{start_idx}, {end_idx})，返回-1标记"
                         logger.error(error_msg)
                         return [("", -1, -1, -1, -1) for _ in range(expected_count)]
-                    results_part1 = self._execute_with_span_reduction(csv_path, start_idx, mid_idx, new_span)
-                    results_part2 = self._execute_with_span_reduction(csv_path, mid_idx, end_idx, new_span)
+                    results_part1 = self._execute_with_span_reduction(csv_path, start_idx, mid_idx, new_span, shape)
+                    results_part2 = self._execute_with_span_reduction(csv_path, mid_idx, end_idx, new_span, shape)
                     return results_part1 + results_part2
             return parsed_results
         except Exception as e:
@@ -354,8 +385,8 @@ class GEMMBenchmarkRunner:
                     error_msg2 = f"Rank {self.rank_id} (NPU {self.npu_id}) 解析异常且无法拆分区间 [{start_idx}, {end_idx})，返回-1标记"
                     logger.error(error_msg2)
                     return [("", -1, -1, -1, -1) for _ in range(expected_count)]
-                results_part1 = self._execute_with_span_reduction(csv_path, start_idx, mid_idx, new_span)
-                results_part2 = self._execute_with_span_reduction(csv_path, mid_idx, end_idx, new_span)
+                results_part1 = self._execute_with_span_reduction(csv_path, start_idx, mid_idx, new_span, shape)
+                results_part2 = self._execute_with_span_reduction(csv_path, mid_idx, end_idx, new_span, shape)
                 return results_part1 + results_part2
     
     def benchmark_shape(self, shape: List[int], shape_order: int, total_shapes: int) -> None:
@@ -473,7 +504,8 @@ class GEMMBenchmarkRunner:
                     csv_path, 
                     current_idx, 
                     end_idx, 
-                    initial_span
+                    initial_span,
+                    shape
                 )
                 
                 # 处理批量结果（batch_results现在总是返回列表，不会为None）
