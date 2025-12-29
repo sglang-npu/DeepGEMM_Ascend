@@ -6,7 +6,7 @@ Catlass GEMM基准测试主入口
 
 import argparse
 
-from .file_io import load_shapes_from_excel, default_shape_group, prepare_shapes_with_qwen3, filter_common_matmul_shapes
+from .file_io import load_shapes_from_excel, default_shape_group, prepare_shapes_with_qwen3
 from .distributed_benchmark_runner import GEMMBenchmarkRunner
 
 
@@ -25,17 +25,19 @@ def main():
                        help='结果保存目录，默认: ./catlass_results')
     parser.add_argument('--msp_dir', type=str, default="./catlass_msp",
                        help='msprof输出目录，默认: ./catlass_msp')
-    parser.add_argument('--operator_type', type=str, default=None,
-                       choices=['SmallMatmulKernel', 'CommonMatmulKernel', 'PaddingMatmulKernel', 'PaddingCommonMatmulKernel'],
-                       help='算子类型，可选: SmallMatmulKernel, CommonMatmulKernel, PaddingMatmulKernel, PaddingCommonMatmulKernel. 默认None表示所有算子')
+    parser.add_argument('--operator_type', type=str, required=True,
+                       choices=['SmallMatmulKernel', 'CommonMatmulKernel', 'PaddingCommonMatmulKernel', 
+                                'PaddingMultiCoreSplitkMatmulKernel', 'PaddingStreamkMatmulKernel'],
+                       help='算子类型，必须提供: SmallMatmulKernel, CommonMatmulKernel, '
+                            'PaddingCommonMatmulKernel, PaddingMultiCoreSplitkMatmulKernel, PaddingStreamkMatmulKernel')
     parser.add_argument('--core_num', type=int, default=20,
                        help='AI Core数量，默认20')
     parser.add_argument('--shapes_file', type=str, default=None,
                        help='shapes.xlsx文件路径，如果提供则从文件读取shape，否则使用默认shape_group')
-    parser.add_argument('--layout_tag_a', type=int, default=None,
-                       help='从 shapes_file 读取时筛选的 LayoutTagA（默认: 0，传入负值代表不过滤）')
-    parser.add_argument('--layout_tag_b', type=int, default=None,
-                       help='从 shapes_file 读取时筛选的 LayoutTagB（默认: 0，传入负值代表不过滤）')
+    parser.add_argument('--layout_tag_a', type=int, required=True,
+                       help='Layout A标签，必须提供: 0=RowMajor, 1=ColumnMajor')
+    parser.add_argument('--layout_tag_b', type=int, required=True,
+                       help='Layout B标签，必须提供: 0=RowMajor, 1=ColumnMajor')
     parser.add_argument('--start_idx', type=int, default=None,
                        help='对筛选后的shapes进行切片的起始位置（从0开始，包含该位置）')
     parser.add_argument('--end_idx', type=int, default=None,
@@ -60,13 +62,11 @@ def main():
     # 根据是否提供shapes_file来决定使用哪个shape_group
     if args.shapes_file:
         print(f"=====Loading shapes from {args.shapes_file}=====")
-        layout_a = args.layout_tag_a if (args.layout_tag_a is not None and args.layout_tag_a >= 0) else None
-        layout_b = args.layout_tag_b if (args.layout_tag_b is not None and args.layout_tag_b >= 0) else None
         shape_group = load_shapes_from_excel(
             args.shapes_file,
             operator_name=args.operator_type,
-            layout_tag_a=layout_a,
-            layout_tag_b=layout_b,
+            layout_tag_a=args.layout_tag_a,
+            layout_tag_b=args.layout_tag_b,
             start_idx=args.start_idx,
             end_idx=args.end_idx
         )
@@ -78,13 +78,14 @@ def main():
     print(f"=====STARTING GEMM BENCHMARK (Rank {args.rank_id}/{args.process_num}, NPU ID: {npu_id})=====")
     print(f"Total shapes to test: {len(shape_group)}")
     print(f"NPU IDs: {npu_ids}")
-    if args.operator_type:
-        print(f"Operator type: {args.operator_type}")
-        print(f"Core number: {args.core_num}")
+    print(f"Operator type: {args.operator_type}")
+    print(f"Core number: {args.core_num}")
+    print(f"Layout A: {args.layout_tag_a} ({'RowMajor' if args.layout_tag_a == 0 else 'ColumnMajor'})")
+    print(f"Layout B: {args.layout_tag_b} ({'RowMajor' if args.layout_tag_b == 0 else 'ColumnMajor'})")
     
-    # 获取layout参数（从命令行参数或Excel筛选条件）
-    layout_a = args.layout_tag_a if (args.layout_tag_a is not None and args.layout_tag_a >= 0) else 0
-    layout_b = args.layout_tag_b if (args.layout_tag_b is not None and args.layout_tag_b >= 0) else 0
+    # 使用命令行参数中的layout值
+    layout_a = args.layout_tag_a
+    layout_b = args.layout_tag_b
     
     # 运行完整基准测试
     runner = GEMMBenchmarkRunner(

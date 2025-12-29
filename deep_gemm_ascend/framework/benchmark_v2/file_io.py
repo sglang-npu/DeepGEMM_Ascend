@@ -15,14 +15,22 @@ import pandas as pd
 
 from .models import CatlassResult
 
-# CommonMatmulKernel的shape约束常量
-COMMON_MATMUL_MAX_N = 50000
-COMMON_MATMUL_MAX_K = 50000
+# CommonMatmulKernel和Padding类型算子的shape约束常量
+MATMUL_MAX_N = 50000
+MATMUL_MAX_K = 50000
+
+# 需要应用shape大小限制的算子类型
+OPERATORS_WITH_SIZE_LIMIT = {
+    'commonmatmulkernel',
+    'paddingcommonmatmulkernel',
+    'paddingmulticoresplitkmatmulkernel',
+    'paddingstreamkmatmulkernel',
+}
 
 
-def filter_common_matmul_shapes(shapes: List[List[int]], operator_name: Optional[str] = None) -> List[List[int]]:
+def filter_shapes_by_size_limit(shapes: List[List[int]], operator_name: Optional[str] = None) -> List[List[int]]:
     """
-    根据算子类型筛选shape，如果是CommonMatmulKernel则筛选N<=5W, K<=5W
+    根据算子类型筛选shape，对CommonMatmulKernel和所有Padding类型算子筛选N<=5W, K<=5W
     
     Args:
         shapes: 原始shape列表
@@ -31,20 +39,24 @@ def filter_common_matmul_shapes(shapes: List[List[int]], operator_name: Optional
     Returns:
         筛选后的shape列表
     """
-    if not operator_name or operator_name.lower() != 'commonmatmulkernel':
+    if not operator_name:
+        return shapes
+    
+    operator_name_lower = operator_name.lower()
+    if operator_name_lower not in OPERATORS_WITH_SIZE_LIMIT:
         return shapes
     
     filtered_shapes = []
     filtered_count = 0
     for shape in shapes:
         m, n, k = shape[0], shape[1], shape[2]
-        if n > COMMON_MATMUL_MAX_N or k > COMMON_MATMUL_MAX_K:
+        if n > MATMUL_MAX_N or k > MATMUL_MAX_K:
             filtered_count += 1
             continue
         filtered_shapes.append(shape)
     
     if filtered_count:
-        print(f"[filter_common_matmul_shapes] 已剔除 CommonMatmulKernel 不满足约束 (N>{COMMON_MATMUL_MAX_N} 或 K>{COMMON_MATMUL_MAX_K}) 的 shape 数量: {filtered_count}")
+        print(f"[filter_shapes_by_size_limit] 已剔除 {operator_name} 不满足约束 (N>{MATMUL_MAX_N} 或 K>{MATMUL_MAX_K}) 的 shape 数量: {filtered_count}")
     
     return filtered_shapes
 
@@ -235,7 +247,11 @@ def load_shapes_from_excel(
         if operator_name is None:
             operator_name = "SmallMatmulKernel"
         if operator_name:
-            filtered_df = filtered_df[filtered_df['Op Name'] == operator_name]
+            # Excel中的算子名称映射：PaddingCommonMatmulKernel -> PaddingMatmulKernel
+            excel_operator_name = operator_name
+            if operator_name == "PaddingCommonMatmulKernel":
+                excel_operator_name = "PaddingMatmulKernel"
+            filtered_df = filtered_df[filtered_df['Op Name'] == excel_operator_name]
         if layout_tag_a is None:
             layout_tag_a = 0
         if layout_tag_a is not None:
@@ -268,8 +284,8 @@ def load_shapes_from_excel(
         if filtered_n1:
             print(f"[load_shapes_from_excel] 已额外剔除 N == 1 的 shape 数量: {filtered_n1}")
         
-        # CommonMatmulKernel的shape约束筛选
-        shapes = filter_common_matmul_shapes(shapes, operator_name)
+        # CommonMatmulKernel和Padding类型算子的shape约束筛选
+        shapes = filter_shapes_by_size_limit(shapes, operator_name)
         
         # 判断是否为CommonMatmulKernel算子，只有Common算子才添加qwen3_shapes
         is_common_matmul = operator_name and operator_name.lower() == 'commonmatmulkernel'

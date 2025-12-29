@@ -32,7 +32,11 @@ kernel_to_op = {
     "CommonMatmulKernelHalfLayout01":
         "_Z18CommonMatmulKernelIDhN7Catlass6layout8RowMajorEDhNS1_11ColumnMajorEDhS2_EvPhS4_S4_S4_",
     "PaddingStreamkMatmulKernelHalfLayout01":
-        "_Z19StreamkMatmulKernelIDhN7Catlass6layout8RowMajorEDhNS1_11ColumnMajorEDhS2_LNS0_4Gemm6Kernel10PaddingTagE0ELS6_0EEvmPhS7_S7_S7_S7_S7_S7__mix_aic"
+        "_Z19StreamkMatmulKernelIDhN7Catlass6layout8RowMajorEDhNS1_11ColumnMajorEDhS2_LNS0_4Gemm6Kernel10PaddingTagE0ELS6_0EEvmPhS7_S7_S7_S7_S7_S7__mix_aic",
+    "PaddingMatmulKernelHalfLayout01Padding030":
+        "_Z19PaddingMatmulKernelIDhN7Catlass6layout8RowMajorEDhNS1_11ColumnMajorEDhS2_LNS0_4Gemm6Kernel10PaddingTagE0ELS6_3EEvmPhS7_S7_S7_S7_S7__mix_aic",
+    "PaddingMatmulKernelHalfLayout01Padding300":
+        "_Z19PaddingMatmulKernelIDhN7Catlass6layout8RowMajorEDhNS1_11ColumnMajorEDhS2_LNS0_4Gemm6Kernel10PaddingTagE3ELS6_0EEvmPhS7_S7_S7_S7_S7__mix_aic",
 }
 # DEFAULT_SEARCH_SPACE = ["kernel_name", "accuracy"]
 DEFAULT_SEARCH_SPACE = ["kernel_name"]

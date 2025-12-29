@@ -35,8 +35,8 @@ class GEMMBenchmarkRunner:
         msp_dir: str = "./msp", 
         operator_type: str = None, 
         core_num: int = 20,
-        layout_tag_a: int = 0,
-        layout_tag_b: int = 0
+        layout_tag_a: int = None,
+        layout_tag_b: int = None
     ):
         """
         初始化基准测试运行器
@@ -49,11 +49,20 @@ class GEMMBenchmarkRunner:
             catlass_bin_path: Catlass可执行文件路径
             result_dir: 结果保存目录
             msp_dir: msprof输出目录
-            operator_type: 算子类型
-            core_num: AI Core数量
-            layout_tag_a: Layout A标签，0=RowMajor, 1=ColumnMajor，默认0
-            layout_tag_b: Layout B标签，0=RowMajor, 1=ColumnMajor，默认0
+            operator_type: 算子类型，必须提供
+            core_num: AI Core数量，默认20
+            layout_tag_a: Layout A标签，必须提供，0=RowMajor, 1=ColumnMajor
+            layout_tag_b: Layout B标签，必须提供，0=RowMajor, 1=ColumnMajor
+        
+        Raises:
+            ValueError: 如果 operator_type、layout_tag_a 或 layout_tag_b 未提供
         """
+        if operator_type is None:
+            raise ValueError("operator_type 必须提供，不能为 None")
+        if layout_tag_a is None:
+            raise ValueError("layout_tag_a 必须提供，不能为 None")
+        if layout_tag_b is None:
+            raise ValueError("layout_tag_b 必须提供，不能为 None")
         self.shape_group = shape_group
         self.result_dir = result_dir
         self.rank_id = rank_id
@@ -119,42 +128,43 @@ class GEMMBenchmarkRunner:
         except Exception as e:
             logger.warning(f"Rank {self.rank_id} (NPU {self.npu_id}) 清空msp目录失败: {e}")
     
-    def _get_kernel_list(self, operator_type: Optional[str]) -> List[str]:
+    def _get_kernel_list(self, operator_type: str) -> List[str]:
         """
         根据operator_type确定需要解析的kernel列表
         
         Args:
-            operator_type: 算子类型，可选值: 'SmallMatmulKernel', 'PaddingMatmulKernel', 'CommonMatmulKernel', None(所有)
+            operator_type: 算子类型，必须提供，可选值: 
+                'SmallMatmulKernel', 'CommonMatmulKernel', 
+                'PaddingCommonMatmulKernel', 
+                'PaddingMultiCoreSplitkMatmulKernel',
+                'PaddingStreamkMatmulKernel'
             
         Returns:
             kernel名称列表
         """
-        all_kernels = [
-            "SmallMatmulKernelHalfLayout00",
-            "SmallMatmulKernelHalfLayout01",
-            "CommonMatmulKernelHalfLayout00",
-            "CommonMatmulKernelHalfLayout01",
-            "PaddingMatmulKernelHalfLayout00Padding030",
-            "PaddingMatmulKernelHalfLayout00Padding300",
-            "PaddingMatmulKernelHalfLayout00Padding330",
-            "PaddingStreamkMatmulKernelHalfLayout01",
-        ]
-        
-        if operator_type is None:
-            return all_kernels
-        elif operator_type == 'SmallMatmulKernel':
+        if operator_type == 'SmallMatmulKernel':
             return ["SmallMatmulKernelHalfLayout00", "SmallMatmulKernelHalfLayout01"]
         elif operator_type == 'CommonMatmulKernel':
             return ["CommonMatmulKernelHalfLayout00", "CommonMatmulKernelHalfLayout01"]
-        elif operator_type == 'PaddingMatmulKernel':
+        elif operator_type == 'PaddingCommonMatmulKernel':
             return [
                 "PaddingMatmulKernelHalfLayout00Padding030",
                 "PaddingMatmulKernelHalfLayout00Padding300",
                 "PaddingMatmulKernelHalfLayout00Padding330",
-                "PaddingStreamkMatmulKernelHalfLayout01",
             ]
+        elif operator_type == 'PaddingMultiCoreSplitkMatmulKernel':
+            # 注意：PaddingMultiCoreSplitkMatmulKernel 可能使用不同的kernel名称
+            # 这里需要根据实际的kernel名称进行匹配
+            # 目前先返回所有padding相关的kernel，后续可以根据实际kernel名称进行细化
+            return [
+                "PaddingMatmulKernelHalfLayout00Padding030",
+                "PaddingMatmulKernelHalfLayout00Padding300",
+                "PaddingMatmulKernelHalfLayout00Padding330",
+            ]
+        elif operator_type == 'PaddingStreamkMatmulKernel':
+            return ["PaddingStreamkMatmulKernelHalfLayout01"]
         else:
-            return all_kernels
+            raise ValueError(f"未知的算子类型: {operator_type}")
     
     def generate_tiling_csv(self, shape: List[int], filter_params: List[Dict[str, int]], csv_path: str) -> None:
         """

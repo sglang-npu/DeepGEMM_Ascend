@@ -18,7 +18,6 @@ int_rule = {
     "block_dim": r'Block Dim:\s*(\d+)',
     "mix_block_dim": r'Mix Block Dim:\s*(\d+)',
 }
-# catlass中dynamic算子中部分算子名和实际采集到的算子名的对应
 kernel_to_op = {
     "PaddingMatmulKernelHalfLayout00Padding030":
         "_Z19PaddingMatmulKernelIDhN7Catlass6layout8RowMajorEDhS2_DhS2_LNS0_4Gemm6Kernel10PaddingTagE0ELS5_3EEvmPhS6_S6_S6_S6_S6__mix_aic",
@@ -30,6 +29,14 @@ kernel_to_op = {
         "_Z17SmallMatmulKernelIDhN7Catlass6layout8RowMajorEDhS2_DhS2_EvPhS3_S3_S3_",
     "CommonMatmulKernelHalfLayout00":
         "_Z18CommonMatmulKernelIDhN7Catlass6layout8RowMajorEDhS2_DhS2_EvPhS3_S3_S3_",
+    "CommonMatmulKernelHalfLayout01":
+        "_Z18CommonMatmulKernelIDhN7Catlass6layout8RowMajorEDhNS1_11ColumnMajorEDhS2_EvPhS4_S4_S4_",
+    "PaddingStreamkMatmulKernelHalfLayout01":
+        "_Z19StreamkMatmulKernelIDhN7Catlass6layout8RowMajorEDhNS1_11ColumnMajorEDhS2_LNS0_4Gemm6Kernel10PaddingTagE0ELS6_0EEvmPhS7_S7_S7_S7_S7_S7__mix_aic",
+    "PaddingMatmulKernelHalfLayout01Padding030":
+        "_Z19PaddingMatmulKernelIDhN7Catlass6layout8RowMajorEDhNS1_11ColumnMajorEDhS2_LNS0_4Gemm6Kernel10PaddingTagE0ELS6_3EEvmPhS7_S7_S7_S7_S7__mix_aic",
+    "PaddingMatmulKernelHalfLayout01Padding300":
+        "_Z19PaddingMatmulKernelIDhN7Catlass6layout8RowMajorEDhNS1_11ColumnMajorEDhS2_LNS0_4Gemm6Kernel10PaddingTagE3ELS6_0EEvmPhS7_S7_S7_S7_S7__mix_aic",
 }
 # DEFAULT_SEARCH_SPACE = ["kernel_name", "accuracy"]
 DEFAULT_SEARCH_SPACE = ["kernel_name"]
@@ -191,7 +198,7 @@ class ResultParse:
             op_res_dir = path_device
         op_res_dir = os.path.join(op_res_dir, op_name)
         if not os.path.isdir(op_res_dir):
-            logger.error(f"op result directory '{op_res_dir}' is not exist.")
+            logger.info(f"op result directory '{op_res_dir}' is not exist.")
             return []
         # 2、按count获取最新目录下的所有csv文件
         csv_list = []
