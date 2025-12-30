@@ -153,19 +153,20 @@ class GEMMBenchmarkRunner:
             return [f"CommonMatmulKernelHalf{layout_suffix}"]
         elif operator_type == 'PaddingCommonMatmulKernel':
             return [
-                f"PaddingMatmulKernelHalf{layout_suffix}Padding001",
-                f"PaddingMatmulKernelHalf{layout_suffix}Padding030",
-                f"PaddingMatmulKernelHalf{layout_suffix}Padding300",
-                f"PaddingMatmulKernelHalf{layout_suffix}Padding031",
-                f"PaddingMatmulKernelHalf{layout_suffix}Padding301",
-                f"PaddingMatmulKernelHalf{layout_suffix}Padding330",
-                f"PaddingMatmulKernelHalf{layout_suffix}Padding331",
+                # f"PaddingCommonMatmulKernelHalf{layout_suffix}Padding000",
+                f"PaddingCommonMatmulKernelHalf{layout_suffix}Padding001",
+                f"PaddingCommonMatmulKernelHalf{layout_suffix}Padding030",
+                f"PaddingCommonMatmulKernelHalf{layout_suffix}Padding300",
+                f"PaddingCommonMatmulKernelHalf{layout_suffix}Padding031",
+                f"PaddingCommonMatmulKernelHalf{layout_suffix}Padding301",
+                f"PaddingCommonMatmulKernelHalf{layout_suffix}Padding330",
+                f"PaddingCommonMatmulKernelHalf{layout_suffix}Padding331",
             ]
         elif operator_type == 'PaddingMultiCoreSplitkMatmulKernel':
             return [
-                f"PaddingMatmulKernelHalf{layout_suffix}Padding030",
-                f"PaddingMatmulKernelHalf{layout_suffix}Padding300",
-                f"PaddingMatmulKernelHalf{layout_suffix}Padding330",
+                f"PaddingMultiCoreSplitkMatmulKernelHalf{layout_suffix}Padding030",
+                f"PaddingMultiCoreSplitkMatmulKernelHalf{layout_suffix}Padding300",
+                f"PaddingMultiCoreSplitkMatmulKernelHalf{layout_suffix}Padding330",
             ]
         elif operator_type == 'PaddingStreamkMatmulKernel':
             return [f"PaddingStreamkMatmulKernelHalf{layout_suffix}"]
@@ -224,10 +225,6 @@ class GEMMBenchmarkRunner:
             "failed", "Failed", "FAILED",
             "exception", "Exception", "EXCEPTION"
         ]
-        # 如果输出中包含错误关键词，可能是异常
-        # 但需要小心，因为某些正常输出也可能包含这些词
-        # 更可靠的方法是检查返回码，但process方法已经合并了输出
-        # 这里我们主要依赖空字符串和结果数量检查
         
         # 检查3: 尝试解析结果数量
         try:

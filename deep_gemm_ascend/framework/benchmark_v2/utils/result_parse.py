@@ -33,21 +33,22 @@ kernel_to_op = {
         "_Z18CommonMatmulKernelIDhN7Catlass6layout8RowMajorEDhNS1_11ColumnMajorEDhS2_EvPhS4_S4_S4_",
     "PaddingStreamkMatmulKernelHalfLayout01":
         "_Z19StreamkMatmulKernelIDhN7Catlass6layout8RowMajorEDhNS1_11ColumnMajorEDhS2_LNS0_4Gemm6Kernel10PaddingTagE0ELS6_0EEvmPhS7_S7_S7_S7_S7_S7__mix_aic",
-    "PaddingMatmulKernelHalfLayout01Padding030":
-        "_Z19PaddingMatmulKernelIDhN7Catlass6layout8RowMajorEDhNS1_11ColumnMajorEDhS2_LNS0_4Gemm6Kernel10PaddingTagE0ELS6_3EEvmPhS7_S7_S7_S7_S7__mix_aic",
-    "PaddingMatmulKernelHalfLayout01Padding300":
-        "_Z19PaddingMatmulKernelIDhN7Catlass6layout8RowMajorEDhNS1_11ColumnMajorEDhS2_LNS0_4Gemm6Kernel10PaddingTagE3ELS6_0EEvmPhS7_S7_S7_S7_S7__mix_aic",
-    "PaddingMatmulKernelHalfLayout01Padding330":
+    "PaddingCommonMatmulKernelHalfLayout01Padding030":
+        "_Z25PaddingCommonMatmulKernelIN7Catlass4Arch7AtlasA2EDhNS0_6layout8RowMajorEDhNS3_11ColumnMajorEDhS4_LNS0_4Gemm6Kernel10PaddingTagE0ELS8_3ELS8_0EEvmPhS9_S9_S9_S9_S9_S9__mix_aic",
+    "PaddingCommonMatmulKernelHalfLayout01Padding300":
+        "_Z25PaddingCommonMatmulKernelIN7Catlass4Arch7AtlasA2EDhNS0_6layout8RowMajorEDhNS3_11ColumnMajorEDhS4_LNS0_4Gemm6Kernel10PaddingTagE3ELS8_0ELS8_0EEvmPhS9_S9_S9_S9_S9_S9__mix_aic",
+    "PaddingCommonMatmulKernelHalfLayout01Padding330":
         "_Z25PaddingCommonMatmulKernelIN7Catlass4Arch7AtlasA2EDhNS0_6layout8RowMajorEDhNS3_11ColumnMajorEDhS4_LNS0_4Gemm6Kernel10PaddingTagE3ELS8_3ELS8_0EEvmPhS9_S9_S9_S9_S9_S9__mix_aic",
-    "PaddingMatmulKernelHalfLayout01Padding331":
+    "PaddingCommonMatmulKernelHalfLayout01Padding331":
         "_Z25PaddingCommonMatmulKernelIN7Catlass4Arch7AtlasA2EDhNS0_6layout8RowMajorEDhS4_DhS4_LNS0_4Gemm6Kernel10PaddingTagE3ELS7_3ELS7_1EEvmPhS8_S8_S8_S8_S8_S8__mix_aic",
-    "PaddingMatmulKernelHalfLayout01Padding031":
+    "PaddingCommonMatmulKernelHalfLayout01Padding031":
         "_Z25PaddingCommonMatmulKernelIN7Catlass4Arch7AtlasA2EDhNS0_6layout8RowMajorEDhNS3_11ColumnMajorEDhS4_LNS0_4Gemm6Kernel10PaddingTagE0ELS8_3ELS8_1EEvmPhS9_S9_S9_S9_S9_S9__mix_aic",
-    "PaddingMatmulKernelHalfLayout01Padding001":
+    "PaddingCommonMatmulKernelHalfLayout01Padding001":
         "_Z25PaddingCommonMatmulKernelIN7Catlass4Arch7AtlasA2EDhNS0_6layout8RowMajorEDhNS3_11ColumnMajorEDhS4_LNS0_4Gemm6Kernel10PaddingTagE0ELS8_0ELS8_1EEvmPhS9_S9_S9_S9_S9_S9__mix_aic",
-    "PaddingMatmulKernelHalfLayout01Padding301":
+    "PaddingCommonMatmulKernelHalfLayout01Padding301":
         "_Z25PaddingCommonMatmulKernelIN7Catlass4Arch7AtlasA2EDhNS0_6layout8RowMajorEDhNS3_11ColumnMajorEDhS4_LNS0_4Gemm6Kernel10PaddingTagE3ELS8_0ELS8_1EEvmPhS9_S9_S9_S9_S9_S9__mix_aic",
 }
+
 # DEFAULT_SEARCH_SPACE = ["kernel_name", "accuracy"]
 DEFAULT_SEARCH_SPACE = ["kernel_name"]
 CSV_FILE_NAME = "OpBasicInfo_*.csv"
@@ -159,8 +160,8 @@ class ResultParse:
         1. origin_result: msprof的回显信息
         2. search_space: 需要搜索的信息, 要保证规则存在于int_rule和str_rule中
         输出: 采集结果列表的字典, 类型已经转换
-        注意: 由于msprof采集算子的输出结果顺序可能与执行顺序无关, 因此该接口不适用于算子信息的采集, 建议外部不要使用这个接口
         """
+
         res_dict = {}
         for search_name in search_space:
             res = self.re_searcher[search_name].findall(origin_result)
