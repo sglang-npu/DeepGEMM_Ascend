@@ -9,7 +9,7 @@ from .logger import logger
 
 # 从msprof op的采集到的字符串结果对应的规则(import re)
 str_rule = {
-    "kernel_name": r'Kernel Func Name:\s*(.+)',
+    "kernel_name": r'Kernel Func Name : \s*(.+)',
 }
 # 从msprof op的采集到的数字结果对应的规则(import re)
 int_rule = {
