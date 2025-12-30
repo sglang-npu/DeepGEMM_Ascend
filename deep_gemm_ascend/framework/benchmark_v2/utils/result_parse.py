@@ -40,7 +40,7 @@ kernel_to_op = {
     "PaddingCommonMatmulKernelHalfLayout01Padding330":
         "_Z25PaddingCommonMatmulKernelIN7Catlass4Arch7AtlasA2EDhNS0_6layout8RowMajorEDhNS3_11ColumnMajorEDhS4_LNS0_4Gemm6Kernel10PaddingTagE3ELS8_3ELS8_0EEvmPhS9_S9_S9_S9_S9_S9__mix_aic",
     "PaddingCommonMatmulKernelHalfLayout01Padding331":
-        "_Z25PaddingCommonMatmulKernelIN7Catlass4Arch7AtlasA2EDhNS0_6layout8RowMajorEDhS4_DhS4_LNS0_4Gemm6Kernel10PaddingTagE3ELS7_3ELS7_1EEvmPhS8_S8_S8_S8_S8_S8__mix_aic",
+        "_Z25PaddingCommonMatmulKernelIN7Catlass4Arch7AtlasA2EDhNS0_6layout8RowMajorEDhNS3_11ColumnMajorEDhS4_LNS0_4Gemm6Kernel10PaddingTagE3ELS8_3ELS8_1EEvmPhS9_S9_S9_S9_S9_S9__mix_aic",
     "PaddingCommonMatmulKernelHalfLayout01Padding031":
         "_Z25PaddingCommonMatmulKernelIN7Catlass4Arch7AtlasA2EDhNS0_6layout8RowMajorEDhNS3_11ColumnMajorEDhS4_LNS0_4Gemm6Kernel10PaddingTagE0ELS8_3ELS8_1EEvmPhS9_S9_S9_S9_S9_S9__mix_aic",
     "PaddingCommonMatmulKernelHalfLayout01Padding001":
