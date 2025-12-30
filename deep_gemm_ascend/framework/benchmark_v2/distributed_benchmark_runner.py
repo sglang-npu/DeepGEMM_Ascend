@@ -100,8 +100,8 @@ class GEMMBenchmarkRunner:
             timeout=15  # 15秒超时
         )
         
-        # 初始化ResultParse，根据operator_type确定kernel_list
-        kernel_list = self._get_kernel_list(operator_type)
+        # 初始化ResultParse，根据operator_type和layout确定kernel_list
+        kernel_list = self._get_kernel_list(operator_type, layout_tag_a, layout_tag_b)
         self.result_parser = ResultParse(kernel_list=kernel_list, device_id=self.npu_id)
         
         # 缓存shape字符串，避免重复计算
@@ -128,9 +128,9 @@ class GEMMBenchmarkRunner:
         except Exception as e:
             logger.warning(f"Rank {self.rank_id} (NPU {self.npu_id}) 清空msp目录失败: {e}")
     
-    def _get_kernel_list(self, operator_type: str) -> List[str]:
+    def _get_kernel_list(self, operator_type: str, layout_tag_a: int, layout_tag_b: int) -> List[str]:
         """
-        根据operator_type确定需要解析的kernel列表
+        根据operator_type和layout确定需要解析的kernel列表
         
         Args:
             operator_type: 算子类型，必须提供，可选值: 
@@ -138,31 +138,37 @@ class GEMMBenchmarkRunner:
                 'PaddingCommonMatmulKernel', 
                 'PaddingMultiCoreSplitkMatmulKernel',
                 'PaddingStreamkMatmulKernel'
+            layout_tag_a: Layout A标签，0=RowMajor, 1=ColumnMajor
+            layout_tag_b: Layout B标签，0=RowMajor, 1=ColumnMajor
             
         Returns:
             kernel名称列表
         """
+        # 根据layout组合确定kernel名称后缀
+        layout_suffix = f"Layout{layout_tag_a}{layout_tag_b}"
+        
         if operator_type == 'SmallMatmulKernel':
-            return ["SmallMatmulKernelHalfLayout00", "SmallMatmulKernelHalfLayout01"]
+            return [f"SmallMatmulKernelHalf{layout_suffix}"]
         elif operator_type == 'CommonMatmulKernel':
-            return ["CommonMatmulKernelHalfLayout00", "CommonMatmulKernelHalfLayout01"]
+            return [f"CommonMatmulKernelHalf{layout_suffix}"]
         elif operator_type == 'PaddingCommonMatmulKernel':
             return [
-                "PaddingMatmulKernelHalfLayout00Padding030",
-                "PaddingMatmulKernelHalfLayout00Padding300",
-                "PaddingMatmulKernelHalfLayout00Padding330",
+                f"PaddingMatmulKernelHalf{layout_suffix}Padding001",
+                f"PaddingMatmulKernelHalf{layout_suffix}Padding030",
+                f"PaddingMatmulKernelHalf{layout_suffix}Padding300",
+                f"PaddingMatmulKernelHalf{layout_suffix}Padding031",
+                f"PaddingMatmulKernelHalf{layout_suffix}Padding301",
+                f"PaddingMatmulKernelHalf{layout_suffix}Padding330",
+                f"PaddingMatmulKernelHalf{layout_suffix}Padding331",
             ]
         elif operator_type == 'PaddingMultiCoreSplitkMatmulKernel':
-            # 注意：PaddingMultiCoreSplitkMatmulKernel 可能使用不同的kernel名称
-            # 这里需要根据实际的kernel名称进行匹配
-            # 目前先返回所有padding相关的kernel，后续可以根据实际kernel名称进行细化
             return [
-                "PaddingMatmulKernelHalfLayout00Padding030",
-                "PaddingMatmulKernelHalfLayout00Padding300",
-                "PaddingMatmulKernelHalfLayout00Padding330",
+                f"PaddingMatmulKernelHalf{layout_suffix}Padding030",
+                f"PaddingMatmulKernelHalf{layout_suffix}Padding300",
+                f"PaddingMatmulKernelHalf{layout_suffix}Padding330",
             ]
         elif operator_type == 'PaddingStreamkMatmulKernel':
-            return ["PaddingStreamkMatmulKernelHalfLayout01"]
+            return [f"PaddingStreamkMatmulKernelHalf{layout_suffix}"]
         else:
             raise ValueError(f"未知的算子类型: {operator_type}")
     
@@ -289,7 +295,7 @@ class GEMMBenchmarkRunner:
                 return None
             return mid
 
-        program = f"{self.catlass_bin_path} {self.npu_id} 2 {csv_path} {start_idx} {end_idx} 0"
+        program = f"{self.catlass_bin_path} {self.npu_id} 2 {csv_path} {start_idx} {end_idx}"
         
         # 根据 span 动态设置 launch-count
         effective_span = span if span > 0 else expected_count

@@ -37,6 +37,16 @@ kernel_to_op = {
         "_Z19PaddingMatmulKernelIDhN7Catlass6layout8RowMajorEDhNS1_11ColumnMajorEDhS2_LNS0_4Gemm6Kernel10PaddingTagE0ELS6_3EEvmPhS7_S7_S7_S7_S7__mix_aic",
     "PaddingMatmulKernelHalfLayout01Padding300":
         "_Z19PaddingMatmulKernelIDhN7Catlass6layout8RowMajorEDhNS1_11ColumnMajorEDhS2_LNS0_4Gemm6Kernel10PaddingTagE3ELS6_0EEvmPhS7_S7_S7_S7_S7__mix_aic",
+    "PaddingMatmulKernelHalfLayout01Padding330":
+        "_Z25PaddingCommonMatmulKernelIN7Catlass4Arch7AtlasA2EDhNS0_6layout8RowMajorEDhNS3_11ColumnMajorEDhS4_LNS0_4Gemm6Kernel10PaddingTagE3ELS8_3ELS8_0EEvmPhS9_S9_S9_S9_S9_S9__mix_aic",
+    "PaddingMatmulKernelHalfLayout01Padding331":
+        "_Z25PaddingCommonMatmulKernelIN7Catlass4Arch7AtlasA2EDhNS0_6layout8RowMajorEDhS4_DhS4_LNS0_4Gemm6Kernel10PaddingTagE3ELS7_3ELS7_1EEvmPhS8_S8_S8_S8_S8_S8__mix_aic",
+    "PaddingMatmulKernelHalfLayout01Padding031":
+        "_Z25PaddingCommonMatmulKernelIN7Catlass4Arch7AtlasA2EDhNS0_6layout8RowMajorEDhNS3_11ColumnMajorEDhS4_LNS0_4Gemm6Kernel10PaddingTagE0ELS8_3ELS8_1EEvmPhS9_S9_S9_S9_S9_S9__mix_aic",
+    "PaddingMatmulKernelHalfLayout01Padding001":
+        "_Z25PaddingCommonMatmulKernelIN7Catlass4Arch7AtlasA2EDhNS0_6layout8RowMajorEDhNS3_11ColumnMajorEDhS4_LNS0_4Gemm6Kernel10PaddingTagE0ELS8_0ELS8_1EEvmPhS9_S9_S9_S9_S9_S9__mix_aic",
+    "PaddingMatmulKernelHalfLayout01Padding301":
+        "_Z25PaddingCommonMatmulKernelIN7Catlass4Arch7AtlasA2EDhNS0_6layout8RowMajorEDhNS3_11ColumnMajorEDhS4_LNS0_4Gemm6Kernel10PaddingTagE3ELS8_0ELS8_1EEvmPhS9_S9_S9_S9_S9_S9__mix_aic",
 }
 # DEFAULT_SEARCH_SPACE = ["kernel_name", "accuracy"]
 DEFAULT_SEARCH_SPACE = ["kernel_name"]
