@@ -113,13 +113,11 @@ link_libraries(runtime python3.11)
 EOF
     )
 
-    local TEMP_FILE
-    TEMP_FILE=$(mktemp)
-
-    sed '0,/^[[:space:]]*[^[:space:]]/ {/^[[:space:]]*[^[:space:]]/d}' "${HOST_CMAKE_FILE}" > "${TEMP_FILE}.tmp"
-
+    local TEMP_FILE="${MSOPGEN_ROOT_DIR}/op_host/CMakeLists.txt.tmp"
+    touch "${TEMP_FILE}"
     echo "${ADD_CONTENT}" > "${TEMP_FILE}"
-    cat "${TEMP_FILE}.tmp" >> "${TEMP_FILE}"
+    sed '0,/^[[:space:]]*[^[:space:]]/ {/^[[:space:]]*[^[:space:]]/d}' "${HOST_CMAKE_FILE}" >> "${TEMP_FILE}"
+
     mv -f "${TEMP_FILE}" "${HOST_CMAKE_FILE}"
 }
 
