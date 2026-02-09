@@ -39,8 +39,8 @@ function msopgen_create() {
 }
 
 function copy_custom_code() {
-    cp -r "${SCRIPT_DIR}/op_host/" "${MSOPGEN_ROOT_DIR}/op_host"
-    cp -r "${SCRIPT_DIR}/op_kernel/" "${MSOPGEN_ROOT_DIR}/op_kernel"
+    cp -r "${SCRIPT_DIR}"/op_host/* "${MSOPGEN_ROOT_DIR}"/op_host
+    cp -r "${SCRIPT_DIR}"/op_kernel/* "${MSOPGEN_ROOT_DIR}"/op_kernel
 }
 
 function determine_device_type() {
@@ -94,7 +94,36 @@ function clean_cache() {
     fi
 }
 
-function custom_build_params() {
+function modify_host_cmake() {
+    local HOST_CMAKE_FILE="${MSOPGEN_ROOT_DIR}/op_host/CMakeLists.txt"
+    local ADD_CONTENT
+    ADD_CONTENT=$(cat << 'EOF'
+aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR} ops_host_srcs)
+aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/op_tiling ops_tiling_srcs)
+set(ops_srcs ${ops_host_srcs} ${ops_tiling_srcs})
+include_directories(
+    ${ASCEND_HOME_PATH}/include
+    ${ASCEND_HOME_PATH}/include/experiment/runtime
+    ${ASCEND_HOME_PATH}/include/experiment/msprof
+    ${ASCEND_HOME_PATH}/include/aclnn
+    /usr/local/include/python3.11
+)
+link_directories(${ASCEND_HOME_PATH}/lib64)
+link_libraries(runtime python3.11)
+EOF
+    )
+
+    local TEMP_FILE
+    TEMP_FILE=$(mktemp)
+
+    sed '0,/^[[:space:]]*[^[:space:]]/ {/^[[:space:]]*[^[:space:]]/d}' "${HOST_CMAKE_FILE}" > "${TEMP_FILE}.tmp"
+
+    echo "${ADD_CONTENT}" > "${TEMP_FILE}"
+    cat "${TEMP_FILE}.tmp" >> "${TEMP_FILE}"
+    mv -f "${TEMP_FILE}" "${HOST_CMAKE_FILE}"
+}
+
+function modify_build_params() {
     if [[ ${CUSTOM_CATLASS_FLAG} == "true" ]]; then
         echo "[DGA] [INFO] custom some catlass code."
         sed -i 's/static size_t GetWorkspaceSize/CATLASS_HOST_DEVICE static size_t GetWorkspaceSize/' \
@@ -108,12 +137,14 @@ function custom_build_params() {
             >> "${MSOPGEN_ROOT_DIR}/op_kernel/CMakeLists.txt"
         sed -i 's/-lexe_graph/-I \/usr\/local\/include\/python3.11 -lruntime -lpython3.11 -lexe_graph/' \
             "${MSOPGEN_ROOT_DIR}/cmake/func.cmake"
+        modify_host_cmake
     fi
 }
 
 function build_package() {
     cd "${MSOPGEN_ROOT_DIR}"
     bash build.sh
+    cd -
 }
 
 function main() {
@@ -122,7 +153,7 @@ function main() {
     download_catlass
     msopgen_create
     copy_custom_code
-    custom_build_params
+    modify_build_params
     build_package
 }
 
