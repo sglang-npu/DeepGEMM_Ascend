@@ -22,7 +22,7 @@ constexpr uint64_t MB_SIZE = 1024 * 1024UL;
 void SetMacroTilingKey(const TilingParams &tilingParams, gert::TilingContext *context)
 {
     uint32_t DATATYPE_IN = static_cast<uint32_t>(context->GetInputTensor(0)->GetDataType());
-    uint32_t DATATYPE_OUT = DATATYPE_IN;
+    uint32_t DATATYPE_OUT = static_cast<uint32_t>(context->GetInputTensor(1)->GetDataType());
     uint32_t KERNEL_TYPE = static_cast<uint32_t>(tilingParams.kernelSerial);
     uint32_t PADDING_TAGA = static_cast<uint32_t>(tilingParams.paddingTagA);
     uint32_t PADDING_TAGB = static_cast<uint32_t>(tilingParams.paddingTagB);
@@ -77,7 +77,7 @@ namespace optiling {
 ge::graphStatus CatlassDynamicMatmulTilingFunc(gert::TilingContext *context)
 {
     auto selfShape = context->GetInputShape(0)->GetOriginShape();
-    auto mat2Shape = context->GetInputShape(0)->GetOriginShape();
+    auto mat2Shape = context->GetInputShape(1)->GetOriginShape();
 
     // todo use mat stride to check transpose
     bool isATrans = false;

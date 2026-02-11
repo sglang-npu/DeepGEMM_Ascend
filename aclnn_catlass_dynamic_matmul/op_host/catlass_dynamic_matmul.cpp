@@ -26,7 +26,7 @@ static ge::graphStatus InferShape(gert::InferShapeContext *context)
     }
 
     auto m = selfShape->GetDim(0);
-    auto n = selfShape->GetDim(0);
+    auto n = mat2Shape->GetDim(1);
 
     outShape->SetDimNum(selfDimNum);
     outShape->SetDim(0, m);
