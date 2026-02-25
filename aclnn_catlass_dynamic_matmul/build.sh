@@ -81,10 +81,6 @@ function parse_args() {
 }
 
 function clean_cache() {
-    if [[ ${CLEAN_FLAG} != "true" ]]; then
-        echo "[DGA] [INFO] close clean flag."
-        return
-    fi
     # open clean flag will clean temp files
     if [[ -d "${CATLASS_DIR}" ]]; then
         echo "[DGA] [INFO] clean catlass directory."
@@ -154,7 +150,11 @@ function build_package() {
 
 function main() {
     parse_args "$@"
-    clean_cache
+    if [[ ${CLEAN_FLAG} == "true" ]]; then
+        echo "[DGA] [INFO] clean third files."
+        clean_cache
+        return
+    fi
     download_catlass
     msopgen_create
     copy_custom_code
