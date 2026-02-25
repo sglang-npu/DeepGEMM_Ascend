@@ -35,7 +35,7 @@ void Document::Init(const std::string& filePath)
     enable_ = initFileSuc && initRowHeadSuc;
 }
 
-bool Document::InitFromFile(const std::string* filePath, const char delimiter)
+bool Document::InitFromFile(const std::string& filePath, const char delimiter)
 {
     srcFilePath_ = filePath;
     std::fstream file(srcFilePath_, std::ios::in | std::ios::out);
@@ -94,7 +94,7 @@ bool Document::InitRowHead(const char delimiter)
     return true;
 }
 
-size_t GetRowCount() const
+size_t Document::GetRowCount() const
 {
     return data_.size();
 }
@@ -102,7 +102,7 @@ size_t GetRowCount() const
 void Document::SaveRow(const std::vector<std::string>& rowInput, const char delimiter)
 {
     if (rowInput.size() != csvHead_.size()) {
-        cerr << "[DGA] [ERROR] RowInput size is not equal with csvHead size." << std::endl;
+        std::cerr << "[DGA] [ERROR] RowInput size is not equal with csvHead size." << std::endl;
         return;
     }
 
@@ -123,13 +123,13 @@ void Document::SaveRow(const std::vector<std::string>& rowInput, const char deli
 }
 
 template <>
-std::string GetCell(const std::string &columnName, const size_t rowIdx) const
+std::string Document::GetCell(const std::string &columnName, const size_t rowIdx) const
 {
     return data_[rowIdx][columnNameToIndex.at(columnName)];
 }
 
 template <>
-uint32_t GetCell(const std::string &columnName, const size_t rowIdx) const
+uint32_t Document::GetCell(const std::string &columnName, const size_t rowIdx) const
 {
     try {
         return std::stoul(data_[rowIdx][columnNameToIndex.at(columnName)]);

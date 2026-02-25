@@ -7,6 +7,8 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 CATLASS_DIR="${SCRIPT_DIR}/catlass"
 CATLASS_GIT_URL="https://gitcode.com/cann/catlass.git"
 MSOPGEN_ROOT_DIR="${SCRIPT_DIR}/msopgen"
+PYTHON_INCLUDE_DIR="/usr/local/python3.11.13/include/python3.11"
+PYTHON_LIBRARY_DIR="/usr/local/python3.11.13/lib"
 
 # variable params
 DEVICE_VERSION=""
@@ -97,21 +99,21 @@ function clean_cache() {
 function modify_host_cmake() {
     local HOST_CMAKE_FILE="${MSOPGEN_ROOT_DIR}/op_host/CMakeLists.txt"
     local ADD_CONTENT
-    ADD_CONTENT=$(cat << 'EOF'
-aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR} ops_host_srcs)
-aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/op_tiling ops_tiling_srcs)
-set(ops_srcs ${ops_host_srcs} ${ops_tiling_srcs})
+    ADD_CONTENT=$(cat << EOF
+aux_source_directory(\${CMAKE_CURRENT_SOURCE_DIR} ops_host_srcs)
+aux_source_directory(\${CMAKE_CURRENT_SOURCE_DIR}/op_tiling ops_tiling_srcs)
+set(ops_srcs \${ops_host_srcs} \${ops_tiling_srcs})
 include_directories(
-    ${ASCEND_HOME_PATH}/include
-    ${ASCEND_HOME_PATH}/include/experiment/runtime
-    ${ASCEND_HOME_PATH}/include/experiment/msprof
-    ${ASCEND_HOME_PATH}/include/aclnn
-    /usr/local/include/python3.11
+    \${ASCEND_HOME_PATH}/include
+    \${ASCEND_HOME_PATH}/include/experiment/runtime
+    \${ASCEND_HOME_PATH}/include/experiment/msprof
+    \${ASCEND_HOME_PATH}/include/aclnn
+    ${PYTHON_INCLUDE_DIR}
 )
-link_directories(${ASCEND_HOME_PATH}/lib64)
+link_directories(\${ASCEND_HOME_PATH}/lib64 ${PYTHON_LIBRARY_DIR})
 link_libraries(runtime python3.11)
 EOF
-    )
+)
 
     local TEMP_FILE="${MSOPGEN_ROOT_DIR}/op_host/CMakeLists.txt.tmp"
     touch "${TEMP_FILE}"
@@ -133,13 +135,18 @@ function modify_build_params() {
         echo "[DGA] [INFO] custom some msopgen params."
         echo "add_ops_compile_options(ALL OPTIONS -I${CATLASS_DIR}/include)" \
             >> "${MSOPGEN_ROOT_DIR}/op_kernel/CMakeLists.txt"
-        sed -i 's/-lexe_graph/-I \/usr\/local\/include\/python3.11 -lruntime -lpython3.11 -lexe_graph/' \
-            "${MSOPGEN_ROOT_DIR}/cmake/func.cmake"
+
+        ESCAPED_PYTHON_INCLUDE_DIR=$(echo "$PYTHON_INCLUDE_DIR" | sed 's/[\/&\\]/\\&/g')
+        ESCAPED_PYTHON_LIBRARY_DIR=$(echo "$PYTHON_LIBRARY_DIR" | sed 's/[\/&\\]/\\&/g')
+        sed -i "s/-lexe_graph/-I ${ESCAPED_PYTHON_INCLUDE_DIR} -lexe_graph/" "${MSOPGEN_ROOT_DIR}/cmake/func.cmake"
+        sed -i "s/-lexe_graph/-L ${ESCAPED_PYTHON_LIBRARY_DIR} -lexe_graph/" "${MSOPGEN_ROOT_DIR}/cmake/func.cmake"
+        sed -i "s/-lexe_graph/-lruntime -lpython3.11 -lexe_graph/" "${MSOPGEN_ROOT_DIR}/cmake/func.cmake"
         modify_host_cmake
     fi
 }
 
 function build_package() {
+    export LD_LIBRARY_PATH=${PYTHON_LIBRARY_DIR}:${LD_LIBRARY_PATH}
     cd "${MSOPGEN_ROOT_DIR}"
     bash build.sh
     cd -

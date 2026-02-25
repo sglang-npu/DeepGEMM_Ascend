@@ -127,7 +127,7 @@ __aicore__ inline void PaddingCommonKernelWrapper(
     constexpr PaddingTag paddingTagC = static_cast<PaddingTag>(PADDING_TAGC);
 
     PaddingCommonMatmulKernel<InDtype, LayoutA, InDtype,
-        LayoutB, OutDtype, LayoutC, paddingTagA, paddingTagB, paddingTagC>(gmA, gmB, gmC, tilingData);
+        LayoutB, OutDtype, LayoutC, paddingTagA, paddingTagB, paddingTagC>(gmA, gmB, gmC, gmW, tilingData);
 }
 } // namespace DynamicKernel
 #endif // CATLASS_PADDING_COMMON_MATMUL_KERNEL_H

@@ -40,7 +40,7 @@ public:
 private:
     void Init(const std::string& filePath);
 
-    bool InitFromFile(const std::string* filePath, const char delimiter = ',');
+    bool InitFromFile(const std::string& filePath, const char delimiter = ',');
 
     bool InitRowHead(const char delimiter = ',');
 

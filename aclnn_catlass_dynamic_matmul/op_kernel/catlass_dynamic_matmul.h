@@ -54,7 +54,7 @@ __aicore__ inline void DynamicMatmulKernelWrapper(
     if constexpr (KERNEL_TYPE == static_cast<uint32_t>(CatlassKernelType::CATLASS_STREAMK_MATMUL)) {
         DynamicKernel::PaddingStreamkMatmulKernelWrapper<
             InDtype, OutDtype, LAYOUT_TAGA, LAYOUT_TAGB, LAYOUT_TAGC,
-            PADDING_TAGA, PADDING_TAGB, PADDING_TAGC>(gmA, gmB, gmC, workspace, tilingData);
+            PADDING_TAGA, PADDING_TAGB>(gmA, gmB, gmC, workspace, tilingData);
         return;
     }
 }
