@@ -1,0 +1,96 @@
+#pragma once
+#include "ascend/include/TritonToLinalg/Passes.h"
+#include "ascend/include/DiscreteMaskAccessConversion/Passes.h"
+#include "ascend/include/TritonToStructured/Passes.h"
+#include "ascend/include/TritonToAnnotation/Passes.h"
+#include "ascend/include/TritonToUnstructure/Passes.h"
+#include "ascend/include/TritonToHIVM/Passes.h"
+#include "ascend/include/TritonToHFusion/Passes.h"
+#include "ascend/include/TritonToLLVM/Passes.h"
+#include "ascend/include/TritonToCFG/Passes.h"
+// #include "amd/include/Dialect/TritonAMDGPU/IR/Dialect.h"
+// #include "amd/include/TritonAMDGPUTransforms/Passes.h"
+// #include "third_party/nvidia/include/Dialect/NVGPU/IR/Dialect.h"
+#include "triton/Dialect/Triton/IR/Dialect.h"
+#include "triton/Dialect/TritonGPU/IR/Dialect.h"
+#include "triton/Dialect/TritonNvidiaGPU/IR/Dialect.h"
+
+// Below headers will allow registration to ROCm passes
+// #include "TritonAMDGPUToLLVM/Passes.h"
+// #include "TritonAMDGPUTransforms/Passes.h"
+// #include "TritonAMDGPUTransforms/TritonGPUConversion.h"
+
+#include "triton/Dialect/Triton/Transforms/Passes.h"
+#include "triton/Dialect/TritonGPU/Transforms/Passes.h"
+#include "triton/Dialect/TritonNvidiaGPU/Transforms/Passes.h"
+
+// #include "nvidia/include/NVGPUToLLVM/Passes.h"
+// #include "nvidia/include/TritonNVIDIAGPUToLLVM/Passes.h"
+#include "triton/Conversion/TritonGPUToLLVM/Passes.h"
+#include "triton/Conversion/TritonToTritonGPU/Passes.h"
+#include "triton/Target/LLVMIR/Passes.h"
+
+#include "mlir/Dialect/LLVMIR/NVVMDialect.h"
+#include "mlir/Dialect/LLVMIR/ROCDLDialect.h"
+#include "mlir/InitAllPasses.h"
+
+#include "ascend/include/Dialect/TritonAscend/IR/TritonAscendDialect.h"
+
+namespace mlir {
+namespace test {
+// void registerTestAliasPass();
+// void registerTestAlignmentPass();
+// void registerTestAllocationPass();
+// void registerTestMembarPass();
+} // namespace test
+} // namespace mlir
+
+inline void registerTritonDialects(mlir::DialectRegistry &registry) {
+  mlir::registerAllPasses();
+  mlir::registerTritonPasses();
+  mlir::triton::gpu::registerTritonGPUPasses();
+  // mlir::registerTritonNvidiaGPUPasses();
+  // mlir::test::registerTestAliasPass();
+  // mlir::test::registerTestAlignmentPass();
+  // mlir::test::registerTestAllocationPass();
+  // mlir::test::registerTestMembarPass();
+  mlir::triton::registerConvertTritonToTritonGPUPass();
+  mlir::triton::registerAllocateSharedMemoryPass();
+  // mlir::triton::registerConvertTritonGPUToLLVMPass();
+  // mlir::triton::registerConvertNVGPUToLLVMPass();
+  // mlir::triton::registerDecomposeUnsupportedNVIDIAConversions();
+  mlir::triton::registerTritonToLinalgPasses();
+  mlir::triton::registerDiscreteMaskAccessConversion();
+  mlir::triton::registerTritonToStructuredPasses();
+  mlir::triton::registerTritonToAnnotationPasses();
+  mlir::triton::registerTritonToUnstructurePasses();
+  mlir::triton::registerTritonToHIVMPasses();
+  mlir::triton::registerTritonToHFusionPasses();
+  mlir::triton::registerTritonToLLVMPasses();
+  mlir::triton::registerTritonToCFGPasses();
+  mlir::registerLLVMDIScope();
+
+  // TritonAMDGPUToLLVM passes
+  // mlir::triton::registerConvertTritonAMDGPUToLLVM();
+  // mlir::triton::registerConvertBuiltinFuncToLLVM();
+  // mlir::triton::registerDecomposeUnsupportedAMDConversions();
+  // mlir::triton::registerOptimizeAMDLDSUsage();
+
+  // TritonAMDGPUTransforms passes
+  // mlir::registerTritonAMDGPUAccelerateMatmul();
+  // mlir::registerTritonAMDGPUOptimizeEpilogue();
+  // mlir::registerTritonAMDGPUReorderInstructions();
+  // mlir::registerTritonAMDGPUStreamPipelineV2();
+  // mlir::registerTritonAMDGPUCanonicalizePointers();
+  // mlir::registerTritonAMDGPUConvertToBufferOps();
+
+  // TODO: register Triton & TritonGPU passes
+  registry.insert<mlir::triton::TritonDialect, mlir::cf::ControlFlowDialect,
+                  /*mlir::triton::nvidia_gpu::TritonNvidiaGPUDialect,*/
+                  mlir::triton::gpu::TritonGPUDialect, mlir::math::MathDialect,
+                  mlir::arith::ArithDialect, mlir::scf::SCFDialect,
+                  mlir::gpu::GPUDialect, mlir::LLVM::LLVMDialect,
+                  mlir::NVVM::NVVMDialect, /*mlir::triton::nvgpu::NVGPUDialect,*/
+                  /*mlir::triton::amdgpu::TritonAMDGPUDialect,*/
+                  mlir::ROCDL::ROCDLDialect>();
+}
