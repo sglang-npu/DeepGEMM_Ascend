@@ -29,13 +29,17 @@ def BuildCFG : Pass<"build-cfg", "mlir::ModuleOp"> {
   let summary = "Build Control Flow Graph from TTIR";
   let description = [{
     This pass analyzes the TTIR and builds a Control Flow Graph (CFG)
-    representation. It can export the CFG to a file in text or DOT format.
+    representation. It exports the CFG to multiple formats (text, DOT, JSON, HTML)
+    for visualization and analysis.
 
-    Options:
-    - output-file: Specify output file (default: print to stdout)
-    - export-dot: Export in DOT format (default: false)
+    The output files will be named as <function_name>_cfg.<ext> and placed in
+    the directory specified by the output-dir option.
   }];
   let constructor = "mlir::triton::createBuildCFGPass()";
+  let options = [
+    Option<"output-dir", "outputDir", "std::string", "\".\"",
+           "Directory where CFG files will be generated">,
+  ];
 }
 
 #endif // TRITON_TO_CFG_PASSES

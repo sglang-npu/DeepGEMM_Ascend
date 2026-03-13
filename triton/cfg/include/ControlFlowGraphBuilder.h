@@ -30,6 +30,8 @@
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 
+#include <stack>
+
 namespace mlir {
 namespace triton {
 
@@ -48,6 +50,9 @@ public:
 
   void runOnOperation() override;
 
+  // Pass 选项
+  std::string outputDir = ".";
+
   // 获取依赖的方言
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<triton::TritonDialect, scf::SCFDialect, cf::ControlFlowDialect>();
@@ -57,22 +62,53 @@ protected:
   // 构建单个函数的 CFG
   std::unique_ptr<cfg::ControlFlowGraph> buildForFunction(triton::FuncOp func);
 
-  // 遍历区域构建 CFG
-  void buildForRegion(Region &region, cfg::ControlFlowGraph &cfg,
-                      size_t entryId);
+  // 处理一个 region，返回该 region 的入口块和出口块
+  struct RegionBlocks {
+    cfg::BasicBlock *entryBlock;
+    cfg::BasicBlock *exitBlock;
+  };
+  RegionBlocks buildForRegion(Region &region, cfg::ControlFlowGraph &cfg,
+                               cfg::BasicBlock *entryBlock,
+                               cfg::BasicBlock *parentStructure = nullptr);
 
-  // 处理终止符操作
-  void handleTerminator(Operation *terminator, cfg::ControlFlowGraph &cfg,
-                        size_t blockId);
+  // 处理 block 中的操作，返回最后处理的基本块
+  cfg::BasicBlock *processBlock(Block &block, cfg::ControlFlowGraph &cfg,
+                                 cfg::BasicBlock *currentBB,
+                                 cfg::BasicBlock *parentStructure = nullptr);
 
-  // 处理 scf.if 操作
-  void handleIfOp(Operation *op, cfg::ControlFlowGraph &cfg, size_t blockId);
+  // 处理 scf.if 操作，返回 if 后面的基本块
+  cfg::BasicBlock *handleIfOp(scf::IfOp ifOp, cfg::ControlFlowGraph &cfg,
+                               cfg::BasicBlock *currentBB,
+                               cfg::BasicBlock *parentStructure = nullptr);
 
-  // 处理 scf.for 操作
-  void handleForOp(Operation *op, cfg::ControlFlowGraph &cfg, size_t blockId);
+  // 处理 scf.for 操作，返回 for 后面的基本块
+  cfg::BasicBlock *handleForOp(scf::ForOp forOp, cfg::ControlFlowGraph &cfg,
+                                cfg::BasicBlock *currentBB,
+                                cfg::BasicBlock *parentStructure = nullptr);
 
-  // 处理 scf.while 操作
-  void handleWhileOp(Operation *op, cfg::ControlFlowGraph &cfg, size_t blockId);
+  // 处理 scf.while 操作，返回 while 后面的基本块
+  cfg::BasicBlock *handleWhileOp(scf::WhileOp whileOp, cfg::ControlFlowGraph &cfg,
+                                  cfg::BasicBlock *currentBB,
+                                  cfg::BasicBlock *parentStructure = nullptr);
+
+  // 创建一个新的指令并添加到 basic block
+  cfg::Instruction *createInstruction(Operation *op, cfg::BasicBlock *parentBlock);
+
+  // 获取下一个指令 ID
+  size_t getNextInstructionId() { return nextInstructionId++; }
+
+private:
+  size_t nextInstructionId = 0;      // 下一个指令 ID
+};
+
+// 独立的 CFG 构建器类（用于非 Pass 场景）
+class ControlFlowGraphBuilder {
+public:
+  // 为函数构建 CFG
+  std::unique_ptr<cfg::ControlFlowGraph> build(triton::FuncOp func);
+
+  // 为模块构建所有函数的 CFG
+  std::vector<std::unique_ptr<cfg::ControlFlowGraph>> buildForModule(ModuleOp module);
 };
 
 // 创建 Pass 的工厂函数

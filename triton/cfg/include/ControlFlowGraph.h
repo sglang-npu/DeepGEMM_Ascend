@@ -36,73 +36,103 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 
 namespace mlir {
 namespace triton {
 namespace cfg {
 
-// 基本块类型
-enum class BlockType {
-  ENTRY,       // 入口块
-  EXIT,        // 出口块
-  NORMAL,      // 普通块
-  LOOP_HEADER, // 循环头
-  LOOP_BODY,   // 循环体
-  LOOP_EXIT,   // 循环出口
-  IF_THEN,     // if-then 分支
-  IF_ELSE,     // if-else 分支
-};
+// 前向声明
+class BasicBlock;
 
-// 基本块节点
-class BasicBlockNode {
+// Instruction 结构体：表示一个指令
+class Instruction {
 public:
-  BasicBlockNode(size_t id, Block *block, BlockType type)
-      : id(id), block(block), type(type) {}
+  Instruction(size_t id, Operation *op, BasicBlock *parentBlock)
+      : id(id), operation(op), parentBlock(parentBlock) {}
 
   // 获取基本信息
   size_t getId() const { return id; }
-  Block *getBlock() const { return block; }
+  Operation *getOperation() const { return operation; }
+  BasicBlock *getParentBlock() const { return parentBlock; }
+
+  // 获取指令的字符串表示
+  std::string getAsString() const;
+
+  // 打印
+  void print(raw_ostream &os, unsigned indent = 0) const;
+  void dump() const;
+
+private:
+  size_t id;                    // 唯一ID
+  Operation *operation;         // 对应的 MLIR Operation
+  BasicBlock *parentBlock;      // 所属的 BasicBlock
+};
+
+// 基本块类型
+enum class BlockType {
+  NORMAL,         // 普通块（包含多个指令）
+  ENTRY,          // 函数入口块
+  EXIT,           // 函数出口块
+  IF_COND,        // if 条件判断块（包含单个 scf.if 指令）
+  FOR_COND,       // for 循环头块（包含单个 scf.for 指令）
+  WHILE_COND,     // while 条件块（包含单个 scf.while 指令）
+  LOOP_BODY,      // 循环体块
+  LOOP_EXIT,      // 循环出口块
+};
+
+// 基本块节点
+class BasicBlock {
+public:
+  BasicBlock(size_t id, BlockType type, BasicBlock *parentStructure = nullptr)
+      : id(id), type(type), parentStructure(parentStructure) {}
+
+  // 获取基本信息
+  size_t getId() const { return id; }
   BlockType getType() const { return type; }
   void setType(BlockType t) { type = t; }
 
-  // 获取后继块列表（用于遍历）
-  ArrayRef<size_t> getSuccessors() const { return successors; }
-  ArrayRef<size_t> getPredecessors() const { return predecessors; }
+  // 外层结构（如果是嵌套在 loop/if 中）
+  BasicBlock *getParentStructure() const { return parentStructure; }
+  void setParentStructure(BasicBlock *parent) { parentStructure = parent; }
 
-  // 获取名称
-  StringRef getName() const;
+  // Instruction 操作
+  void addInstruction(std::unique_ptr<Instruction> inst);
+  Instruction *getInstruction(size_t idx) const;
+  size_t getNumInstructions() const { return instructions.size(); }
+  const SmallVector<std::unique_ptr<Instruction>> &getInstructions() const { return instructions; }
+
+  // 获取后继和前驱
+  ArrayRef<BasicBlock *> getSuccessors() const { return successors; }
+  ArrayRef<BasicBlock *> getPredecessors() const { return predecessors; }
 
   // 边的操作
-  void addSuccessor(size_t succId) { successors.push_back(succId); }
-  void addPredecessor(size_t predId) { predecessors.push_back(predId); }
+  void addSuccessor(BasicBlock *succ);
+  void addPredecessor(BasicBlock *pred);
 
   size_t getNumSuccessors() const { return successors.size(); }
   size_t getNumPredecessors() const { return predecessors.size(); }
 
-  // 获取后继和前驱的访问器
-  SmallVector<size_t>::const_iterator successor_begin() const {
-    return successors.begin();
-  }
-  SmallVector<size_t>::const_iterator successor_end() const {
-    return successors.end();
-  }
-  SmallVector<size_t>::const_iterator predecessor_begin() const {
-    return predecessors.begin();
-  }
-  SmallVector<size_t>::const_iterator predecessor_end() const {
-    return predecessors.end();
-  }
+  // 获取名称
+  std::string getName() const;
+
+  // 获取类型字符串
+  StringRef getTypeString() const;
 
   // 打印
   void print(raw_ostream &os) const;
   void dump() const;
 
+  // 导出为 JSON（用于网页可视化）
+  void exportToJSON(raw_ostream &os, unsigned indent = 0) const;
+
 private:
-  size_t id;                          // 唯一ID
-  Block *block;                       // 对应的 MLIR Block
-  BlockType type;                     // 块类型
-  SmallVector<size_t> successors;     // 后继块ID列表
-  SmallVector<size_t> predecessors;   // 前驱块ID列表
+  size_t id;                                          // 唯一ID
+  BlockType type;                                     // 块类型
+  BasicBlock *parentStructure;                        // 外层结构（loop/if）的 basic block
+  SmallVector<std::unique_ptr<Instruction>> instructions;  // 指令列表
+  SmallVector<BasicBlock *> successors;               // 后继块指针列表
+  SmallVector<BasicBlock *> predecessors;             // 前驱块指针列表
 };
 
 // 控制流图
@@ -115,23 +145,33 @@ public:
   triton::FuncOp getFunction() const { return function; }
 
   // 基本块操作
-  size_t addBasicBlock(Block *block, BlockType type = BlockType::NORMAL);
+  BasicBlock *createBasicBlock(BlockType type, BasicBlock *parentStructure = nullptr);
 
-  BasicBlockNode &getBasicBlock(size_t id) { return *basicBlocks[id]; }
-  const BasicBlockNode &getBasicBlock(size_t id) const {
-    return *basicBlocks[id];
+  BasicBlock *getBasicBlock(size_t id) {
+    if (id < basicBlocks.size()) return basicBlocks[id].get();
+    return nullptr;
   }
-
-  BasicBlockNode *findBasicBlock(Block *block);
-  const BasicBlockNode *findBasicBlock(Block *block) const;
+  const BasicBlock *getBasicBlock(size_t id) const {
+    if (id < basicBlocks.size()) return basicBlocks[id].get();
+    return nullptr;
+  }
 
   size_t getNumBlocks() const { return basicBlocks.size(); }
 
-  // 边的操作
-  void addEdge(size_t fromId, size_t toId);
+  // 获取入口和出口块
+  BasicBlock *getEntryBlock() { return entryBlock; }
+  const BasicBlock *getEntryBlock() const { return entryBlock; }
+  BasicBlock *getExitBlock() { return exitBlock; }
+  const BasicBlock *getExitBlock() const { return exitBlock; }
+
+  void setEntryBlock(BasicBlock *bb) { entryBlock = bb; }
+  void setExitBlock(BasicBlock *bb) { exitBlock = bb; }
+
+  // 添加边
+  void addEdge(BasicBlock *from, BasicBlock *to);
 
   // 遍历
-  using BlockVisitor = llvm::function_ref<void(BasicBlockNode &)>;
+  using BlockVisitor = llvm::function_ref<void(BasicBlock &)>;
   void traverse(BlockVisitor visitor);
 
   // 打印
@@ -144,10 +184,18 @@ public:
   // 导出到文件
   llvm::Error exportToFile(StringRef filename) const;
 
+  // 导出为 HTML（网页可视化）
+  llvm::Error exportToHTML(StringRef filename) const;
+
+  // 导出为 JSON
+  void exportToJSON(raw_ostream &os) const;
+
 private:
   triton::FuncOp function;                                      // 所属函数
-  SmallVector<std::unique_ptr<BasicBlockNode>> basicBlocks; // 基本块节点
-  llvm::MapVector<Block *, size_t> blockToId;               // Block 到 ID 的映射
+  SmallVector<std::unique_ptr<BasicBlock>> basicBlocks;         // 基本块节点
+  BasicBlock *entryBlock = nullptr;                             // 入口块
+  BasicBlock *exitBlock = nullptr;                              // 出口块
+  size_t nextBlockId = 0;                                       // 下一个块ID
 };
 
 } // namespace cfg
