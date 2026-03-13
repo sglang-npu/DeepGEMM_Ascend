@@ -44,6 +44,7 @@ namespace cfg {
 
 // 前向声明
 class BasicBlock;
+class ControlFlowGraph;
 
 // Instruction 结构体：表示一个指令
 class Instruction {
@@ -56,6 +57,13 @@ public:
   Operation *getOperation() const { return operation; }
   BasicBlock *getParentBlock() const { return parentBlock; }
 
+  // 检查是否有子图（内部区域）
+  bool hasSubGraph() const { return subGraph != nullptr; }
+  ControlFlowGraph *getSubGraph() const { return subGraph.get(); }
+  void setSubGraph(std::unique_ptr<ControlFlowGraph> graph) {
+    subGraph = std::move(graph);
+  }
+
   // 获取指令的字符串表示
   std::string getAsString() const;
 
@@ -67,6 +75,7 @@ private:
   size_t id;                    // 唯一ID
   Operation *operation;         // 对应的 MLIR Operation
   BasicBlock *parentBlock;      // 所属的 BasicBlock
+  std::unique_ptr<ControlFlowGraph> subGraph;  // 子图（用于 reduce 等有内部区域的操作）
 };
 
 // 基本块类型

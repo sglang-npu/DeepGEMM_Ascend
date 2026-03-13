@@ -229,6 +229,61 @@ cfg::BasicBlock *BuildCFGPass::processBlock(Block &block, cfg::ControlFlowGraph 
       // return 操作
       createInstruction(&op, currentBB);
     }
+    else if (op.getNumRegions() > 0) {
+      // 有内部区域的 Triton 操作 (如 tt.reduce, tt.scan 等)
+      // 先创建指令
+      auto *inst = createInstruction(&op, currentBB);
+
+      // 为该操作创建子图
+      auto subGraph = std::make_unique<cfg::ControlFlowGraph>(cfg.getFunction());
+      auto *subEntry = subGraph->createBasicBlock(cfg::BlockType::ENTRY);
+      subGraph->setEntryBlock(subEntry);
+      auto *subExit = subGraph->createBasicBlock(cfg::BlockType::EXIT);
+      subGraph->setExitBlock(subExit);
+
+      // 用于子图中生成唯一指令 ID
+      size_t subInstId = 0;
+
+      // 遍历所有区域
+      for (size_t regionIdx = 0; regionIdx < op.getNumRegions(); ++regionIdx) {
+        Region &region = op.getRegion(regionIdx);
+        if (!region.empty()) {
+          // 为每个区域构建 CFG
+          cfg::BasicBlock *regionEntryBB = nullptr;
+          cfg::BasicBlock *regionLastBB = nullptr;
+
+          for (Block &regionBlock : region) {
+            auto *bb = subGraph->createBasicBlock(cfg::BlockType::NORMAL);
+            if (!regionEntryBB) regionEntryBB = bb;
+
+            // 将区域中的操作添加到子图的基本块
+            for (Operation &regionOp : regionBlock) {
+              auto *regionInst = std::make_unique<cfg::Instruction>(
+                  subInstId++, &regionOp, bb);
+              bb->addInstruction(std::move(regionInst));
+            }
+
+            // 连接基本块
+            if (regionLastBB) {
+              subGraph->addEdge(regionLastBB, bb);
+            }
+            regionLastBB = bb;
+          }
+
+          // 连接区域入口到子图入口
+          if (regionEntryBB) {
+            subGraph->addEdge(subEntry, regionEntryBB);
+          }
+          // 连接区域出口到子图出口
+          if (regionLastBB) {
+            subGraph->addEdge(regionLastBB, subExit);
+          }
+        }
+      }
+
+      // 设置子图
+      inst->setSubGraph(std::move(subGraph));
+    }
     else {
       // 普通操作，直接添加到当前 basic block
       createInstruction(&op, currentBB);
