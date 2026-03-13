@@ -1,6 +1,7 @@
 add_triton_library(TritonToCFG
   ControlFlowGraph.cpp
   ControlFlowGraphBuilder.cpp
+  InterProceduralCFG.cpp
   Passes.cpp
 
   DEPENDS
