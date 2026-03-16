@@ -37,6 +37,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 
 namespace mlir {
 namespace triton {
@@ -183,6 +184,17 @@ public:
   using BlockVisitor = llvm::function_ref<void(BasicBlock &)>;
   void traverse(BlockVisitor visitor);
 
+  // Operation 到 Instruction 的查询
+  Instruction *getInstruction(Operation *op) const {
+    auto it = opToInstructionMap.find(op);
+    return (it != opToInstructionMap.end()) ? it->second : nullptr;
+  }
+
+  // 添加 Operation 到 Instruction 的映射
+  void addOpToInstruction(Operation *op, Instruction *inst) {
+    opToInstructionMap[op] = inst;
+  }
+
   // 打印
   void print(raw_ostream &os) const;
   void dump() const;
@@ -205,6 +217,9 @@ private:
   BasicBlock *entryBlock = nullptr;                             // 入口块
   BasicBlock *exitBlock = nullptr;                              // 出口块
   size_t nextBlockId = 0;                                       // 下一个块ID
+
+  // Operation 到 Instruction 的映射（支持快速查询）
+  std::unordered_map<Operation*, Instruction*> opToInstructionMap;
 };
 
 } // namespace cfg
