@@ -172,7 +172,7 @@ cfg::BasicBlock *BuildCFGPass::processBlock(Block &block, cfg::ControlFlowGraph 
       auto *ifCondBB = cfg.createBasicBlock(BlockType::IF_COND, parentStructure);
 
       // 将当前 if 指令添加到 ifCondBB
-      createInstruction(&op, ifCondBB);
+      createInstruction(&op, ifCondBB, cfg);
 
       // 连接当前块到 if 条件块
       cfg.addEdge(currentBB, ifCondBB);
@@ -185,7 +185,7 @@ cfg::BasicBlock *BuildCFGPass::processBlock(Block &block, cfg::ControlFlowGraph 
       auto *forCondBB = cfg.createBasicBlock(BlockType::FOR_COND, parentStructure);
 
       // 将当前 for 指令添加到 forCondBB
-      createInstruction(&op, forCondBB);
+      createInstruction(&op, forCondBB, cfg);
 
       // 连接当前块到 for 条件块
       cfg.addEdge(currentBB, forCondBB);
@@ -198,7 +198,7 @@ cfg::BasicBlock *BuildCFGPass::processBlock(Block &block, cfg::ControlFlowGraph 
       auto *whileCondBB = cfg.createBasicBlock(BlockType::WHILE_COND, parentStructure);
 
       // 将当前 while 指令添加到 whileCondBB
-      createInstruction(&op, whileCondBB);
+      createInstruction(&op, whileCondBB, cfg);
 
       // 连接当前块到 while 条件块
       cfg.addEdge(currentBB, whileCondBB);
@@ -208,26 +208,26 @@ cfg::BasicBlock *BuildCFGPass::processBlock(Block &block, cfg::ControlFlowGraph 
     }
     else if (isa<scf::YieldOp>(op)) {
       // yield 操作：创建指令并继续（后续由循环处理逻辑连接）
-      createInstruction(&op, currentBB);
+      createInstruction(&op, currentBB, cfg);
     }
     else if (isa<scf::ConditionOp>(op)) {
       // condition 操作（while 循环条件）：创建指令并继续
-      createInstruction(&op, currentBB);
+      createInstruction(&op, currentBB, cfg);
     }
     else if (isa<cf::CondBranchOp>(op)) {
       // cf.cond_br 条件分支
-      createInstruction(&op, currentBB);
+      createInstruction(&op, currentBB, cfg);
 
       // 注意：cf.cond_br 的目标块会在后续处理中连接
       // 这里我们依赖于 MLIR 的 block 结构已经建立
     }
     else if (isa<cf::BranchOp>(op)) {
       // cf.br 无条件跳转
-      createInstruction(&op, currentBB);
+      createInstruction(&op, currentBB, cfg);
     }
     else if (isa<triton::ReturnOp>(op)) {
       // return 操作
-      createInstruction(&op, currentBB);
+      createInstruction(&op, currentBB, cfg);
     }
     else if (op.getNumRegions() > 0) {
       // 有内部区域的 Triton 操作 (如 tt.reduce, tt.scan 等)
@@ -258,9 +258,13 @@ cfg::BasicBlock *BuildCFGPass::processBlock(Block &block, cfg::ControlFlowGraph 
 
             // 将区域中的操作添加到子图的基本块
             for (Operation &regionOp : regionBlock) {
-              auto *regionInst = std::make_unique<cfg::Instruction>(
+              auto regionInst = std::make_unique<cfg::Instruction>(
                   subInstId++, &regionOp, bb);
+              cfg::Instruction *instPtr = regionInst.get();
               bb->addInstruction(std::move(regionInst));
+
+              // 添加到op到instruction的映射
+              subGraph->addOpToInstruction(&regionOp, instPtr);
             }
 
             // 连接基本块
@@ -286,7 +290,7 @@ cfg::BasicBlock *BuildCFGPass::processBlock(Block &block, cfg::ControlFlowGraph 
     }
     else {
       // 普通操作，直接添加到当前 basic block
-      createInstruction(&op, currentBB);
+      createInstruction(&op, currentBB, cfg);
     }
   }
 
@@ -428,12 +432,15 @@ cfg::BasicBlock *BuildCFGPass::handleWhileOp(scf::WhileOp whileOp, cfg::ControlF
   return loopExitBB;
 }
 
-cfg::Instruction *BuildCFGPass::createInstruction(Operation *op, cfg::BasicBlock *parentBlock) {
+cfg::Instruction *BuildCFGPass::createInstruction(Operation *op, cfg::BasicBlock *parentBlock, cfg::ControlFlowGraph &cfg) {
   if (!op || !parentBlock) return nullptr;
 
   auto inst = std::make_unique<cfg::Instruction>(getNextInstructionId(), op, parentBlock);
   cfg::Instruction *instPtr = inst.get();
   parentBlock->addInstruction(std::move(inst));
+
+  // 将 Operation 到 Instruction 的映射添加到 CFG
+  cfg.addOpToInstruction(op, instPtr);
 
   return instPtr;
 }
@@ -469,7 +476,9 @@ ControlFlowGraphBuilder::build(triton::FuncOp func) {
         // 创建 if 条件块
         auto *ifCondBB = cfg->createBasicBlock(cfg::BlockType::IF_COND, nullptr);
         auto inst = std::make_unique<cfg::Instruction>(0, &op, ifCondBB);
+        cfg::Instruction *instPtr = inst.get();
         ifCondBB->addInstruction(std::move(inst));
+        cfg->addOpToInstruction(&op, instPtr);
         cfg->addEdge(currentBB, ifCondBB);
 
         // 创建汇合块
@@ -484,7 +493,9 @@ ControlFlowGraphBuilder::build(triton::FuncOp func) {
           for (Block &thenBlock : ifOp.getThenRegion()) {
             for (Operation &thenOp : thenBlock) {
               auto inst = std::make_unique<cfg::Instruction>(0, &thenOp, thenEntryBB);
+              cfg::Instruction *instPtr = inst.get();
               thenEntryBB->addInstruction(std::move(inst));
+              cfg->addOpToInstruction(&thenOp, instPtr);
             }
           }
           thenExitBB = thenEntryBB;
@@ -500,7 +511,9 @@ ControlFlowGraphBuilder::build(triton::FuncOp func) {
           for (Block &elseBlock : ifOp.getElseRegion()) {
             for (Operation &elseOp : elseBlock) {
               auto inst = std::make_unique<cfg::Instruction>(0, &elseOp, elseEntryBB);
+              cfg::Instruction *instPtr = inst.get();
               elseEntryBB->addInstruction(std::move(inst));
+              cfg->addOpToInstruction(&elseOp, instPtr);
             }
           }
           elseExitBB = elseEntryBB;
@@ -529,7 +542,9 @@ ControlFlowGraphBuilder::build(triton::FuncOp func) {
         // 创建 for 条件块
         auto *forCondBB = cfg->createBasicBlock(cfg::BlockType::FOR_COND, nullptr);
         auto inst = std::make_unique<cfg::Instruction>(0, &op, forCondBB);
+        cfg::Instruction *instPtr = inst.get();
         forCondBB->addInstruction(std::move(inst));
+        cfg->addOpToInstruction(&op, instPtr);
         cfg->addEdge(currentBB, forCondBB);
 
         // 创建循环体入口块
@@ -543,7 +558,9 @@ ControlFlowGraphBuilder::build(triton::FuncOp func) {
         for (Block &bodyBlock : forOp.getRegion()) {
           for (Operation &bodyOp : bodyBlock) {
             auto inst = std::make_unique<cfg::Instruction>(0, &bodyOp, loopBodyEntryBB);
+            cfg::Instruction *instPtr = inst.get();
             loopBodyEntryBB->addInstruction(std::move(inst));
+            cfg->addOpToInstruction(&bodyOp, instPtr);
           }
         }
 
@@ -558,7 +575,9 @@ ControlFlowGraphBuilder::build(triton::FuncOp func) {
         // 创建 while 条件块
         auto *whileCondBB = cfg->createBasicBlock(cfg::BlockType::WHILE_COND, nullptr);
         auto inst = std::make_unique<cfg::Instruction>(0, &op, whileCondBB);
+        cfg::Instruction *instPtr = inst.get();
         whileCondBB->addInstruction(std::move(inst));
+        cfg->addOpToInstruction(&op, instPtr);
         cfg->addEdge(currentBB, whileCondBB);
 
         // 创建 before 区域（条件计算）
@@ -575,14 +594,18 @@ ControlFlowGraphBuilder::build(triton::FuncOp func) {
         for (Block &beforeBlock : whileOp.getBefore()) {
           for (Operation &beforeOp : beforeBlock) {
             auto inst = std::make_unique<cfg::Instruction>(0, &beforeOp, beforeEntryBB);
+            cfg::Instruction *instPtr = inst.get();
             beforeEntryBB->addInstruction(std::move(inst));
+            cfg->addOpToInstruction(&beforeOp, instPtr);
           }
         }
 
         for (Block &afterBlock : whileOp.getAfter()) {
           for (Operation &afterOp : afterBlock) {
             auto inst = std::make_unique<cfg::Instruction>(0, &afterOp, afterEntryBB);
+            cfg::Instruction *instPtr = inst.get();
             afterEntryBB->addInstruction(std::move(inst));
+            cfg->addOpToInstruction(&afterOp, instPtr);
           }
         }
 
@@ -598,7 +621,9 @@ ControlFlowGraphBuilder::build(triton::FuncOp func) {
       else {
         // 普通操作，添加到当前块
         auto inst = std::make_unique<cfg::Instruction>(0, &op, currentBB);
+        cfg::Instruction *instPtr = inst.get();
         currentBB->addInstruction(std::move(inst));
+        cfg->addOpToInstruction(&op, instPtr);
       }
     }
 
