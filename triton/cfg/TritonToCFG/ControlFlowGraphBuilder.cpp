@@ -21,6 +21,7 @@
  */
 
 #include "TritonToCFG/ControlFlowGraphBuilder.h"
+#include "TritonToCFG/DataflowGraph.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
@@ -105,6 +106,20 @@ void BuildCFGPass::runOnOperation() {
       llvm::errs() << "Failed to export CFG to " << htmlPath << "\n";
     } else {
       llvm::errs() << "Exported CFG to " << htmlPath << "\n";
+    }
+
+    // 构建 DataFlowGraph（包含 Memory SSA 分析）
+    llvm::errs() << "  Building DataFlowGraph with Memory SSA...\n";
+    DataFlowGraph dataFlowGraph(*cfg);
+    dataFlowGraph.build();
+
+    // 导出 DataFlowGraph
+    llvm::SmallString<128> dataflowPath(outputPath);
+    llvm::sys::path::append(dataflowPath, baseName + "_dataflow.json");
+    llvm::raw_fd_ostream dfOs(dataflowPath, ec);
+    if (!ec) {
+      dataFlowGraph.exportToJSON(dfOs);
+      llvm::errs() << "  Exported DataFlowGraph to " << dataflowPath << "\n";
     }
   }
 }

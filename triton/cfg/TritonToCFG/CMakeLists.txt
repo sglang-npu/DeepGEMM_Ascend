@@ -1,13 +1,11 @@
 add_triton_library(TritonToCFG
+  AliasAnalysis.cpp
   ControlFlowGraph.cpp
   ControlFlowGraphBuilder.cpp
+  DataflowGraph.cpp
   InterProceduralCFG.cpp
+  MemorySsaBuilder.cpp
   Passes.cpp
-  tensor.cpp
-  memory_ssa.cpp
-  alias_analysis.cpp
-  memory_ssa_builder.cpp
-  dataflow_graph.cpp
 
   DEPENDS
   TritonToCFGPassIncGen
