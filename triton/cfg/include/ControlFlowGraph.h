@@ -195,6 +195,8 @@ public:
     opToInstructionMap[op] = inst;
   }
 
+  bool isBackEdge(BasicBlock *from, BasicBlock *to) const;
+
   // 打印
   void print(raw_ostream &os) const;
   void dump() const;

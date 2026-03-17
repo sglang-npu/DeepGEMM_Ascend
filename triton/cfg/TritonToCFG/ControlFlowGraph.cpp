@@ -30,6 +30,7 @@
 
 #include <fstream>
 #include <sstream>
+#include <algorithm>
 
 using namespace mlir;
 using namespace triton;
@@ -141,10 +142,21 @@ void BasicBlock::print(raw_ostream &os) const {
     os << "]\n";
   }
 
-  // 打印指令
+  // 打印指令 - COND节点只打印第一行
   os << "  Instructions (" << instructions.size() << "):\n";
   for (const auto &inst : instructions) {
-    inst->print(os, 4);
+    std::string instStr = inst->getAsString();
+    
+    // 对COND节点截断：只保留第一行
+    if (type == BlockType::IF_COND || type == BlockType::FOR_COND || 
+        type == BlockType::WHILE_COND) {
+      size_t newlinePos = instStr.find('\n');
+      if (newlinePos != std::string::npos) {
+        instStr = instStr.substr(0, newlinePos) + " ...";
+      }
+    }
+    
+    os.indent(4) << "Inst[" << inst->getId() << "]: " << instStr << "\n";
   }
   os << "\n";
 }
@@ -184,6 +196,16 @@ void BasicBlock::exportToJSON(raw_ostream &os, unsigned indent) const {
     os << ind << "      \"id\": " << instructions[i]->getId() << ",\n";
     // 转义字符串用于 JSON
     std::string instStr = instructions[i]->getAsString();
+    
+    // COND节点只取第一行
+    if (type == BlockType::IF_COND || type == BlockType::FOR_COND || 
+        type == BlockType::WHILE_COND) {
+      size_t newlinePos = instStr.find('\n');
+      if (newlinePos != std::string::npos) {
+        instStr = instStr.substr(0, newlinePos) + " ...";
+      }
+    }
+    
     // 简单的 JSON 字符串转义
     std::string escaped;
     for (char c : instStr) {
@@ -234,6 +256,23 @@ void ControlFlowGraph::addEdge(BasicBlock *from, BasicBlock *to) {
   from->addSuccessor(to);
 }
 
+// 判断是否为回边（从循环体回到循环头）
+bool ControlFlowGraph::isBackEdge(BasicBlock *from, BasicBlock *to) const {
+  // 回边定义：指向 FOR_COND/WHILE_COND 且 from 是该循环的后代
+  if (to->getType() != BlockType::FOR_COND && 
+      to->getType() != BlockType::WHILE_COND) 
+    return false;
+  
+  // 检查 from 是否属于以 to 为头的循环
+  // 方法：检查 from 的 parentStructure 链是否包含 to
+  BasicBlock *current = from;
+  while (current) {
+    if (current == to) return true;
+    current = current->getParentStructure();
+  }
+  return false;
+}
+
 void ControlFlowGraph::traverse(BlockVisitor visitor) {
   for (auto &bb : basicBlocks) {
     visitor(*bb);
@@ -270,23 +309,35 @@ void ControlFlowGraph::exportDOT(raw_ostream &os) const {
   os << "digraph CFG_" << cleanFuncName << " {\n";
   os << "  label=\"CFG for " << funcNameStr << "\";\n";
   os << "  labelloc=t;\n";
-  os << "  rankdir=TB;\n\n";
+  os << "  rankdir=TB;\n";
+  os << "  splines=true;\n";           // 使用曲线边
+  os << "  overlap=false;\n";          // 防止节点重叠
+  os << "  nodesep=0.6;\n";           // 节点水平间距
+  os << "  ranksep=1.2;\n";           // 层间距
+  os << "  fontsize=12;\n\n";
 
   // 设置节点样式
   for (const auto &bb : basicBlocks) {
     os << "  \"" << bb->getName() << "\" [";
-    os << "label=\"" << bb->getName() << "\\n";
-    os << "(" << bb->getTypeString() << ")\\n";
-
-    // 添加指令摘要（最多3条）
+    os << "label=\"" << bb->getName() << "\\n(" << bb->getTypeString() << ")";
+    
+    // 指令摘要：COND节点只取第一行，其他节点最多3条
     size_t numInsts = bb->getNumInstructions();
     if (numInsts > 0) {
       os << "\\n";
-      for (size_t i = 0; i < std::min(numInsts, (size_t)3); ++i) {
-        std::string instStr = bb->getInstruction(i)->getAsString();
-        // 截断并转义
+      
+      // COND节点只显示第一条指令的第一行
+      if (bb->getType() == BlockType::IF_COND || 
+          bb->getType() == BlockType::FOR_COND || 
+          bb->getType() == BlockType::WHILE_COND) {
+        std::string instStr = bb->getInstruction(0)->getAsString();
+        size_t newlinePos = instStr.find('\n');
+        if (newlinePos != std::string::npos) {
+          instStr = instStr.substr(0, newlinePos);
+        }
         if (instStr.length() > 40) instStr = instStr.substr(0, 37) + "...";
-        // 替换特殊字符
+        
+        // 转义
         std::string escaped;
         for (char c : instStr) {
           if (c == '"') escaped += "\\\"";
@@ -294,14 +345,35 @@ void ControlFlowGraph::exportDOT(raw_ostream &os) const {
           else if (c == '\n') escaped += "\\n";
           else escaped += c;
         }
-        os << escaped << "\\n";
+        os << escaped;
+        if (numInsts > 1) os << "\\n... (" << (numInsts - 1) << " more)";
+      } else {
+        // 其他节点显示最多3条
+        for (size_t i = 0; i < std::min(numInsts, (size_t)3); ++i) {
+          std::string instStr = bb->getInstruction(i)->getAsString();
+          // 只取第一行
+          size_t newlinePos = instStr.find('\n');
+          if (newlinePos != std::string::npos) {
+            instStr = instStr.substr(0, newlinePos) + "...";
+          }
+          if (instStr.length() > 40) instStr = instStr.substr(0, 37) + "...";
+          
+          std::string escaped;
+          for (char c : instStr) {
+            if (c == '"') escaped += "\\\"";
+            else if (c == '\\') escaped += "\\\\";
+            else if (c == '\n') escaped += "\\n";
+            else escaped += c;
+          }
+          os << escaped << "\\n";
+        }
+        if (numInsts > 3) os << "... (" << (numInsts - 3) << " more)\\n";
       }
-      if (numInsts > 3) os << "... (" << (numInsts - 3) << " more)\\n";
     }
 
     os << "\", ";
-
-    // 根据类型设置颜色
+    
+    // 形状和颜色
     switch (bb->getType()) {
     case BlockType::ENTRY:
       os << "style=filled, fillcolor=lightgreen, shape=ellipse";
@@ -326,15 +398,22 @@ void ControlFlowGraph::exportDOT(raw_ostream &os) const {
       os << "shape=box";
       break;
     }
-    os << "];\n";
+    os << ", fontsize=10];\n";
   }
 
   os << "\n";
 
-  // 输出边
+  // 输出边：回边红色，其他绿色
   for (const auto &bb : basicBlocks) {
     for (auto *succ : bb->getSuccessors()) {
-      os << "  \"" << bb->getName() << "\" -> \"" << succ->getName() << "\";\n";
+      bool isBack = isBackEdge(bb.get(), succ);
+      os << "  \"" << bb->getName() << "\" -> \"" << succ->getName() << "\"";
+      os << " [color=" << (isBack ? "red" : "green");
+      os << ", penwidth=" << (isBack ? "2.5" : "1.5") << "";
+      if (isBack) {
+        os << ", style=dashed";  // 回边用虚线
+      }
+      os << "];\n";
     }
   }
 
@@ -378,7 +457,25 @@ void ControlFlowGraph::exportToJSON(raw_ostream &os) const {
     os << "\n";
   }
 
-  os << "  ]\n";
+  // 添加边信息（带类型标记）
+  os << "  ],\n";
+  os << "  \"edges\": [\n";
+  
+  bool first = true;
+  for (const auto &bb : basicBlocks) {
+    for (auto *succ : bb->getSuccessors()) {
+      if (!first) os << ",\n";
+      first = false;
+      
+      bool isBack = isBackEdge(bb.get(), succ);
+      os << "    {\"from\": " << bb->getId() 
+         << ", \"to\": " << succ->getId()
+         << ", \"fromName\": \"" << bb->getName() << "\""
+         << ", \"toName\": \"" << succ->getName() << "\""
+         << ", \"type\": \"" << (isBack ? "back" : "normal") << "\"}";
+    }
+  }
+  os << "\n  ]\n";
   os << "}\n";
 }
 
@@ -394,13 +491,14 @@ llvm::Error ControlFlowGraph::exportToHTML(StringRef filename) const {
   auto funcName = const_cast<triton::FuncOp&>(function).getName();
   std::string funcNameStr = funcName.empty() ? "unnamed" : funcName.str();
 
-  // 生成嵌入 vis.js 的 HTML 页面
   os << R"html(<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <title>CFG for )html" << funcNameStr << R"html(</title>
-    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+    <script src="https://unpkg.com/dagre-d3@0.6.4/dist/dagre-d3.min.js"></script>
     <style type="text/css">
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -408,61 +506,141 @@ llvm::Error ControlFlowGraph::exportToHTML(StringRef filename) const {
             padding: 0;
             display: flex;
             height: 100vh;
+            background: #f0f2f5;  /* 浅色背景 */
+            overflow: hidden;
         }
-        #mynetwork {
+        #svg-container {
             flex: 1;
-            border: 1px solid lightgray;
-            background: #fafafa;
+            overflow: auto;
+            background: #ffffff;  /* 纯白画布 */
+            cursor: grab;
+            border-right: 1px solid #ddd;
+        }
+        #svg-container:active {
+            cursor: grabbing;
         }
         #sidebar {
-            width: 400px;
-            border-left: 1px solid #ddd;
-            background: white;
-            padding: 20px;
+            width: 520px;
+            background: #ffffff;
+            padding: 24px;
             overflow-y: auto;
-            box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+            box-shadow: -2px 0 8px rgba(0,0,0,0.08);
+            z-index: 10;
         }
         h1 {
             margin-top: 0;
-            color: #333;
-            font-size: 20px;
+            color: #1a1a1a;
+            font-size: 24px;
+            border-bottom: 3px solid #1976d2;
+            padding-bottom: 12px;
+            font-weight: 600;
         }
         h2 {
-            color: #666;
+            color: #444;
             font-size: 16px;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 5px;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 8px;
+            margin-top: 28px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         .block-info {
-            background: #f5f5f5;
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 10px;
+            background: #f5f7fa;
+            padding: 14px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            border-left: 4px solid #1976d2;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #333;
         }
         .instruction {
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 3px;
-            padding: 8px;
-            margin: 5px 0;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 12px;
+            background: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-left: 3px solid #ff9800;
+            border-radius: 6px;
+            padding: 14px;
+            margin: 10px 0;
+            font-family: 'Consolas', 'Monaco', 'SF Mono', monospace;
+            font-size: 15px;           /* 大字体 */
+            line-height: 1.6;
             white-space: pre-wrap;
             word-break: break-all;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
         }
         .instruction-id {
-            color: #888;
-            font-size: 10px;
+            color: #555;
+            font-size: 13px;
+            background: #eceff1;
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin-right: 8px;
+            font-weight: 600;
         }
         #default-msg {
-            color: #999;
+            color: #888;
             text-align: center;
-            margin-top: 50px;
+            margin-top: 120px;
+            font-style: italic;
+            font-size: 16px;
+        }
+        .legend {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            background: rgba(255,255,255,0.96);
+            padding: 14px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            font-size: 13px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            z-index: 100;
+            color: #333;
+        }
+        .legend-item {
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
+        }
+        .legend-line {
+            width: 30px;
+            height: 3px;
+            margin-right: 12px;
+            border-radius: 2px;
+        }
+        
+        /* SVG 样式 - 适配浅色背景 */
+        .node rect {
+            stroke-width: 2px;
+            rx: 6;
+            ry: 6;
+        }
+        .node text {
+            font-family: 'Consolas', 'Monaco', 'SF Mono', monospace;
+            font-size: 13px;          /* 节点内字体 */
+            font-weight: 500;
+            pointer-events: none;
+            fill: #212121;
+        }
+        .edgePath path {
+            stroke-width: 2.5px;
+            stroke-linecap: square;
+            fill: none;
+        }
+        .arrowhead {
+            fill-opacity: 1;
         }
     </style>
 </head>
 <body>
-    <div id="mynetwork"></div>
+    <div id="svg-container">
+        <svg id="svg-canvas" width="2400" height="1800"></svg>
+    </div>
+    <div class="legend">
+        <div class="legend-item"><div class="legend-line" style="background: #2e7d32;"></div>正常控制流 (向下)</div>
+        <div class="legend-item"><div class="legend-line" style="background: #d32f2f; border-top: 2px dashed #d32f2f; height: 0;"></div>循环回边 (向上)</div>
+    </div>
     <div id="sidebar">
         <h1>CFG: )html" << funcNameStr << R"html(</h1>
         <div id="default-msg">
@@ -484,126 +662,252 @@ llvm::Error ControlFlowGraph::exportToHTML(StringRef filename) const {
     </div>
 
 <script type="text/javascript">
-    // CFG data
     var cfgData = )html";
 
-  // 输出 JSON 数据
   exportToJSON(os);
 
   os << R"html(;
 
-    // Create nodes and edges
-    var nodes = new vis.DataSet();
-    var edges = new vis.DataSet();
+    // 使用 dagre 计算布局
+    const g = new dagre.graphlib.Graph({ compound: true });
+    
+    g.setGraph({
+        rankdir: 'TB',           // 自上而下
+        ranksep: 120,            // 层间距
+        nodesep: 100,            // 节点水平间距
+        edgesep: 25,
+        marginx: 60,
+        marginy: 60,
+        acyclicer: 'greedy',
+        ranker: 'longest-path'
+    });
+    
+    g.setDefaultEdgeLabel(function() { return {}; });
 
-    // Color mapping
-    var colorMap = {
-        'ENTRY': '#90EE90',
-        'EXIT': '#F08080',
-        'IF_COND': '#FFFACD',
-        'FOR_COND': '#ADD8E6',
-        'WHILE_COND': '#ADD8E6',
-        'LOOP_BODY': '#E0FFFF',
-        'LOOP_EXIT': '#FFB6C1',
-        'NORMAL': '#FFFFFF'
+    // 颜色配置 - 适配浅色背景
+    const colorMap = {
+        'ENTRY': '#c8e6c9',      // 柔和绿
+        'EXIT': '#ffcdd2',       // 柔和红
+        'IF_COND': '#fff9c4',    // 柔和黄
+        'FOR_COND': '#b3e5fc',   // 柔和蓝
+        'WHILE_COND': '#b3e5fc', // 柔和蓝
+        'LOOP_BODY': '#e1f5fe',  // 浅蓝
+        'LOOP_EXIT': '#f8bbd0',   // 浅粉
+        'NORMAL': '#f5f5f5'      // 浅灰
+    };
+    
+    const borderMap = {
+        'ENTRY': '#2e7d32',
+        'EXIT': '#c62828',
+        'IF_COND': '#f57c00',
+        'FOR_COND': '#0288d1',
+        'WHILE_COND': '#0288d1',
+        'LOOP_BODY': '#0288d1',
+        'LOOP_EXIT': '#c2185b',
+        'NORMAL': '#616161'
     };
 
-    // Shape mapping
-    var shapeMap = {
-        'ENTRY': 'ellipse',
-        'EXIT': 'ellipse',
-        'IF_COND': 'diamond',
-        'FOR_COND': 'diamond',
-        'WHILE_COND': 'diamond',
-        'LOOP_BODY': 'box',
-        'LOOP_EXIT': 'box',
-        'NORMAL': 'box'
-    };
+    const nodeWidth = 320;       // 节点加宽以容纳更多文本
+    const lineHeight = 18;       // 每行高度
 
-    // Add nodes
-    cfgData.blocks.forEach(function(block) {
-        var label = block.name + '\n(' + block.type + ')';
-        if (block.instructions.length > 0) {
-            label += '\n\n';
-            block.instructions.slice(0, 3).forEach(function(inst) {
-                var op = inst.operation.substring(0, 40);
-                if (inst.operation.length > 40) op += '...';
-                label += op + '\n';
-            });
+    // 辅助函数：截断指令文本
+    function truncateLine(text, maxLen) {
+        if (text.length <= maxLen) return text;
+        return text.substring(0, maxLen-3) + '...';
+    }
+
+    // 添加节点
+    cfgData.blocks.forEach(block => {
+        const isCond = ['IF_COND', 'FOR_COND', 'WHILE_COND'].includes(block.type);
+        const isEntry = block.type === 'ENTRY';
+        const isExit = block.type === 'EXIT';
+        
+        // 构建多行标签
+        let lines = [];
+        lines.push(block.name + ' (' + block.type + ')');
+        
+        if (isCond && block.instructions.length > 0) {
+            // COND节点：只显示第一行指令
+            let firstLine = truncateLine(block.instructions[0].operation.split('\n')[0], 58);
+            lines.push(firstLine);
+            if (block.instructions.length > 1) {
+                lines.push('  +' + (block.instructions.length - 1) + ' instructions');
+            }
+        } else if (block.instructions.length > 0) {
+            // 非COND节点：最多显示3行指令
+            const showCount = Math.min(block.instructions.length, 3);
+            for (let i = 0; i < showCount; i++) {
+                let line = truncateLine(block.instructions[i].operation.split('\n')[0], 58);
+                lines.push(line);
+            }
             if (block.instructions.length > 3) {
-                label += '... (' + (block.instructions.length - 3) + ' more)';
+                lines.push('  +' + (block.instructions.length - 3) + ' more...');
             }
         }
-
-        nodes.add({
-            id: block.id,
+        
+        const label = lines.join('\n');
+        const height = 50 + lines.length * lineHeight;  // 基础高度+行高
+        
+        const nodeConfig = {
             label: label,
-            color: {
-                background: colorMap[block.type] || '#FFFFFF',
-                border: '#666666',
-                highlight: {
-                    background: '#FFD700',
-                    border: '#FF4500'
-                }
-            },
-            shape: shapeMap[block.type] || 'box',
-            font: {
-                face: 'Consolas, Monaco, monospace',
-                size: 11
-            },
-            margin: 10,
-            blockData: block
-        });
+            width: nodeWidth,
+            height: height,
+            customData: block,
+            fillColor: colorMap[block.type] || '#ffffff',
+            strokeColor: borderMap[block.type] || '#424242',
+            isCond: isCond
+        };
+        
+        // ENTRY固定最上层(rank: source)，EXIT固定最下层(rank: sink)
+        if (isEntry) {
+            nodeConfig.rank = 'source';
+        } else if (isExit) {
+            nodeConfig.rank = 'sink';
+        }
+        
+        g.setNode(block.id.toString(), nodeConfig);
     });
 
-    // Add edges
-    cfgData.blocks.forEach(function(block) {
-        block.successors.forEach(function(succId) {
-            edges.add({
-                from: block.id,
-                to: succId,
-                arrows: 'to',
-                color: { color: '#666666' },
-                smooth: { type: 'cubicBezier' }
+    // 添加边
+    if (cfgData.edges) {
+        cfgData.edges.forEach(edge => {
+            const isBack = edge.type === 'back';
+            g.setEdge(edge.from.toString(), edge.to.toString(), {
+                lineInterpolate: 'orthogonal',  // Manhattan routing
+                isBack: isBack,
+                strokeColor: isBack ? '#d32f2f' : '#2e7d32',
+                strokeDasharray: isBack ? '6,4' : '0',
+                strokeWidth: isBack ? 2.5 : 2
             });
         });
-    });
+    }
 
-    // Create network
-    var container = document.getElementById('mynetwork');
-    var data = {
-        nodes: nodes,
-        edges: edges
-    };
-    var options = {
-        layout: {
-            hierarchical: {
-                direction: 'UD',
-                sortMethod: 'directed',
-                levelSeparation: 150,
-                nodeSpacing: 200
+    // 计算布局
+    dagre.layout(g);
+
+    // 使用 D3 绘制
+    const svg = d3.select('#svg-canvas');
+    const svgGroup = svg.append('g');
+
+    // 缩放和平移
+    const zoom = d3.zoom()
+        .scaleExtent([0.3, 3])
+        .on('zoom', function(event) {
+            svgGroup.attr('transform', event.transform);
+        });
+    svg.call(zoom);
+
+    // 绘制边 - 正交路径
+    const edgeSelection = svgGroup.selectAll('.edgePath')
+        .data(g.edges())
+        .enter()
+        .append('g')
+        .attr('class', 'edgePath');
+
+    edgeSelection.append('path')
+        .attr('d', function(e) {
+            const edge = g.edge(e);
+            const points = edge.points;
+            
+            // Manhattan routing: 直角线段
+            let d = d3.path();
+            d.moveTo(points[0].x, points[0].y);
+            
+            for (let i = 1; i < points.length; i++) {
+                d.lineTo(points[i].x, points[i].y);
             }
-        },
-        physics: {
-            enabled: false
-        },
-        interaction: {
-            hover: true,
-            selectConnectedEdges: true
-        }
-    };
+            return d.toString();
+        })
+        .attr('stroke', function(e) { return g.edge(e).strokeColor; })
+        .attr('stroke-width', function(e) { return g.edge(e).strokeWidth; })
+        .attr('stroke-dasharray', function(e) { return g.edge(e).strokeDasharray; })
+        .attr('fill', 'none');
 
-    var network = new vis.Network(container, data, options);
+    // 箭头
+    edgeSelection.append('polygon')
+        .attr('class', 'arrowhead')
+        .attr('points', function(e) {
+            const edge = g.edge(e);
+            const points = edge.points;
+            const last = points[points.length - 1];
+            const prev = points[points.length - 2] || points[0];
+            
+            const dx = last.x - prev.x;
+            const dy = last.y - prev.y;
+            const angle = Math.atan2(dy, dx);
+            
+            const size = 10;
+            const angle1 = angle + Math.PI * 0.85;
+            const angle2 = angle - Math.PI * 0.85;
+            
+            return [
+                [last.x, last.y],
+                [last.x + Math.cos(angle1) * size, last.y + Math.sin(angle1) * size],
+                [last.x + Math.cos(angle2) * size, last.y + Math.sin(angle2) * size]
+            ].join(' ');
+        })
+        .attr('fill', function(e) { return g.edge(e).strokeColor; });
 
-    // Click handler
-    network.on("click", function (params) {
-        if (params.nodes.length > 0) {
-            var blockId = params.nodes[0];
-            var block = cfgData.blocks.find(b => b.id === blockId);
-            showBlockDetails(block);
-        }
+    // 绘制节点
+    const nodeSelection = svgGroup.selectAll('.node')
+        .data(g.nodes())
+        .enter()
+        .append('g')
+        .attr('class', 'node')
+        .attr('transform', function(v) { 
+            const node = g.node(v);
+            return 'translate(' + (node.x - node.width/2) + ',' + (node.y - node.height/2) + ')'; 
+        })
+        .style('cursor', 'pointer')
+        .on('click', function(event, v) {
+            const node = g.node(v);
+            showBlockDetails(node.customData);
+        });
+
+    // 节点矩形
+    nodeSelection.append('rect')
+        .attr('width', function(v) { return g.node(v).width; })
+        .attr('height', function(v) { return g.node(v).height; })
+        .attr('fill', function(v) { return g.node(v).fillColor; })
+        .attr('stroke', function(v) { return g.node(v).strokeColor; })
+        .attr('stroke-width', 2)
+        .style('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))');
+
+    // 节点文本 - 多行
+    nodeSelection.each(function(v) {
+        const node = g.node(v);
+        const lines = node.label.split('\n');
+        const selection = d3.select(this);
+        
+        lines.forEach((line, i) => {
+            selection.append('text')
+                .attr('x', 14)
+                .attr('y', 22 + i * lineHeight)
+                .text(line)
+                .style('font-weight', i === 0 ? 'bold' : (node.isCond && i === 1 ? '600' : 'normal'))
+                .style('fill', i === 0 ? '#1565c0' : '#424242')  // 第一行标题蓝色，其余深灰
+                .style('font-size', i === 0 ? '14px' : '13px');
+        });
     });
 
+    // 调整画布尺寸并居中
+    const graphWidth = g.graph().width + 120;
+    const graphHeight = g.graph().height + 120;
+    svg.attr('width', graphWidth).attr('height', graphHeight);
+
+    const container = document.getElementById('svg-container');
+    const scale = Math.min(
+        container.clientWidth / graphWidth,
+        container.clientHeight / graphHeight,
+        1.0
+    ) * 0.9;
+    
+    const transform = d3.zoomIdentity
+        .translate(container.clientWidth/2 - graphWidth*scale/2, 40)
+        .scale(scale);
+    svg.call(zoom.transform, transform);
+
+    // 详情面板
     function showBlockDetails(block) {
         document.getElementById('default-msg').style.display = 'none';
         document.getElementById('block-details').style.display = 'block';
@@ -612,44 +916,42 @@ llvm::Error ControlFlowGraph::exportToHTML(StringRef filename) const {
         document.getElementById('block-type').textContent = block.type;
         document.getElementById('block-id').textContent = block.id;
 
-        // Predecessors
-        var predsHtml = '';
+        let predsHtml = '';
         if (block.predecessors.length === 0) {
-            predsHtml = '<em>None</em>';
+            predsHtml = '<em style="color:#888;">None</em>';
         } else {
-            block.predecessors.forEach(function(predId) {
-                var pred = cfgData.blocks.find(b => b.id === predId);
-                predsHtml += '<div>→ ' + (pred ? pred.name : 'BB' + predId) + '</div>';
+            block.predecessors.forEach(predId => {
+                const pred = cfgData.blocks.find(b => b.id === predId);
+                const isBack = cfgData.edges.find(e => e.from === predId && e.to === block.id && e.type === 'back');
+                const style = isBack ? 'color: #d32f2f; font-weight: bold;' : 'color: #333;';
+                predsHtml += `<div style="${style} margin: 5px 0; font-size: 14px;">← ${pred ? pred.name : 'BB'+predId}${isBack ? ' [回边]' : ''}</div>`;
             });
         }
         document.getElementById('preds').innerHTML = predsHtml;
 
-        // Successors
-        var succsHtml = '';
+        let succsHtml = '';
         if (block.successors.length === 0) {
-            succsHtml = '<em>None</em>';
+            succsHtml = '<em style="color:#888;">None</em>';
         } else {
-            block.successors.forEach(function(succId) {
-                var succ = cfgData.blocks.find(b => b.id === succId);
-                succsHtml += '<div>→ ' + (succ ? succ.name : 'BB' + succId) + '</div>';
+            block.successors.forEach(succId => {
+                const succ = cfgData.blocks.find(b => b.id === succId);
+                const isBack = cfgData.edges.find(e => e.from === block.id && e.to === succId && e.type === 'back');
+                const style = isBack ? 'color: #d32f2f; font-weight: bold;' : 'color: #333;';
+                succsHtml += `<div style="${style} margin: 5px 0; font-size: 14px;">→ ${succ ? succ.name : 'BB'+succId}${isBack ? ' [回边]' : ''}</div>`;
             });
         }
         document.getElementById('succs').innerHTML = succsHtml;
 
-        // Instructions
         document.getElementById('inst-count').textContent = block.instructions.length;
-        var instHtml = '';
-        block.instructions.forEach(function(inst, idx) {
-            instHtml += '<div class="instruction">';
-            instHtml += '<span class="instruction-id">[' + inst.id + ']</span> ';
-            instHtml += escapeHtml(inst.operation);
-            instHtml += '</div>';
+        let instHtml = '';
+        block.instructions.forEach(inst => {
+            instHtml += `<div class="instruction"><span class="instruction-id">[${inst.id}]</span>${escapeHtml(inst.operation)}</div>`;
         });
         document.getElementById('instructions').innerHTML = instHtml;
     }
 
     function escapeHtml(text) {
-        var div = document.createElement('div');
+        const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
     }
