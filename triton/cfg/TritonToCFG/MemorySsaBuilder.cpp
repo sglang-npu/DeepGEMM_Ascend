@@ -468,8 +468,8 @@ TensorObject* MemorySSABuilder::createTensorObject(Operation* op) {
   SmallVector<int64_t> shape;
   Type elementType;
 
-  // 使用辅助函数提取shape和element type
-  MemorySSABuilderHelper::extractShapeAndElementType(resultType, shape, elementType);
+  // 使用Tensor.h中的辅助函数提取shape和element type
+  extractShapeAndElementType(resultType, shape, elementType);
 
   // 设置默认的kind（可以根据操作类型推断）
   TensorObject::TensorKind kind = TensorObject::TensorKind::GLOBAL_MEMORY;
