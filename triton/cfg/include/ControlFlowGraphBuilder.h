@@ -61,12 +61,23 @@ public:
 protected:
   // 构建单个函数的 CFG
   std::unique_ptr<cfg::ControlFlowGraph> buildForFunction(triton::FuncOp func);
+};
+
+// 独立的 CFG 构建器类（用于非 Pass 场景）
+class ControlFlowGraphBuilder {
+public:
+  // 为函数构建 CFG
+  std::unique_ptr<cfg::ControlFlowGraph> build(triton::FuncOp func);
+
+  // 为模块构建所有函数的 CFG
+  std::vector<std::unique_ptr<cfg::ControlFlowGraph>> buildForModule(ModuleOp module);
 
   // 处理一个 region，返回该 region 的入口块和出口块
   struct RegionBlocks {
     cfg::BasicBlock *entryBlock;
     cfg::BasicBlock *exitBlock;
   };
+
   RegionBlocks buildForRegion(Region &region, cfg::ControlFlowGraph &cfg,
                                cfg::BasicBlock *entryBlock,
                                cfg::BasicBlock *parentStructure = nullptr);
@@ -99,16 +110,6 @@ protected:
 
 private:
   size_t nextInstructionId = 0;      // 下一个指令 ID
-};
-
-// 独立的 CFG 构建器类（用于非 Pass 场景）
-class ControlFlowGraphBuilder {
-public:
-  // 为函数构建 CFG
-  std::unique_ptr<cfg::ControlFlowGraph> build(triton::FuncOp func);
-
-  // 为模块构建所有函数的 CFG
-  std::vector<std::unique_ptr<cfg::ControlFlowGraph>> buildForModule(ModuleOp module);
 };
 
 // 创建 Pass 的工厂函数

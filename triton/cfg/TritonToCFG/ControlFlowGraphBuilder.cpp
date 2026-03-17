@@ -111,37 +111,12 @@ void BuildCFGPass::runOnOperation() {
 
 std::unique_ptr<cfg::ControlFlowGraph>
 BuildCFGPass::buildForFunction(triton::FuncOp func) {
-  auto cfg = std::make_unique<cfg::ControlFlowGraph>(func);
-
-  if (func.getBody().empty()) {
-    // 空函数，只创建入口和出口
-    auto *entry = cfg->createBasicBlock(BlockType::ENTRY);
-    auto *exit = cfg->createBasicBlock(BlockType::EXIT);
-    cfg->addEdge(entry, exit);
-    return cfg;
-  }
-
-  // 创建入口块
-  auto *entryBlock = cfg->createBasicBlock(BlockType::ENTRY);
-  cfg->setEntryBlock(entryBlock);
-
-  // 创建出口块
-  auto *exitBlock = cfg->createBasicBlock(BlockType::EXIT);
-  cfg->setExitBlock(exitBlock);
-
-  // 为函数体构建 CFG
-  auto result = buildForRegion(func.getBody(), *cfg, entryBlock, nullptr);
-
-  // 连接函数体出口到函数出口
-  if (result.exitBlock) {
-    cfg->addEdge(result.exitBlock, exitBlock);
-  }
-
-  return cfg;
+  ControlFlowGraphBuilder cfgBuilder;
+  return cfgBuilder.build(func);
 }
 
-BuildCFGPass::RegionBlocks
-BuildCFGPass::buildForRegion(Region &region, cfg::ControlFlowGraph &cfg,
+ControlFlowGraphBuilder::RegionBlocks
+ControlFlowGraphBuilder::buildForRegion(Region &region, cfg::ControlFlowGraph &cfg,
                               cfg::BasicBlock *entryBlock,
                               cfg::BasicBlock *parentStructure) {
   cfg::BasicBlock *currentBB = entryBlock;
@@ -159,7 +134,7 @@ BuildCFGPass::buildForRegion(Region &region, cfg::ControlFlowGraph &cfg,
   return {entryBlock, lastBlock};
 }
 
-cfg::BasicBlock *BuildCFGPass::processBlock(Block &block, cfg::ControlFlowGraph &cfg,
+cfg::BasicBlock *ControlFlowGraphBuilder::processBlock(Block &block, cfg::ControlFlowGraph &cfg,
                                              cfg::BasicBlock *currentBB,
                                              cfg::BasicBlock *parentStructure) {
   if (!currentBB) return nullptr;
@@ -297,7 +272,7 @@ cfg::BasicBlock *BuildCFGPass::processBlock(Block &block, cfg::ControlFlowGraph 
   return currentBB;
 }
 
-cfg::BasicBlock *BuildCFGPass::handleIfOp(scf::IfOp ifOp, cfg::ControlFlowGraph &cfg,
+cfg::BasicBlock *ControlFlowGraphBuilder::handleIfOp(scf::IfOp ifOp, cfg::ControlFlowGraph &cfg,
                                            cfg::BasicBlock *ifCondBB,
                                            cfg::BasicBlock *parentStructure) {
   // 创建 if 后面的汇合块
@@ -353,7 +328,7 @@ cfg::BasicBlock *BuildCFGPass::handleIfOp(scf::IfOp ifOp, cfg::ControlFlowGraph 
   return mergeBB;
 }
 
-cfg::BasicBlock *BuildCFGPass::handleForOp(scf::ForOp forOp, cfg::ControlFlowGraph &cfg,
+cfg::BasicBlock *ControlFlowGraphBuilder::handleForOp(scf::ForOp forOp, cfg::ControlFlowGraph &cfg,
                                             cfg::BasicBlock *forCondBB,
                                             cfg::BasicBlock *parentStructure) {
   // 创建循环体入口块
@@ -377,7 +352,7 @@ cfg::BasicBlock *BuildCFGPass::handleForOp(scf::ForOp forOp, cfg::ControlFlowGra
   return loopExitBB;
 }
 
-cfg::BasicBlock *BuildCFGPass::handleWhileOp(scf::WhileOp whileOp, cfg::ControlFlowGraph &cfg,
+cfg::BasicBlock *ControlFlowGraphBuilder::handleWhileOp(scf::WhileOp whileOp, cfg::ControlFlowGraph &cfg,
                                               cfg::BasicBlock *whileCondBB,
                                               cfg::BasicBlock *parentStructure) {
   // while 操作有两个区域：before（条件）和 after（循环体）
@@ -432,7 +407,7 @@ cfg::BasicBlock *BuildCFGPass::handleWhileOp(scf::WhileOp whileOp, cfg::ControlF
   return loopExitBB;
 }
 
-cfg::Instruction *BuildCFGPass::createInstruction(Operation *op, cfg::BasicBlock *parentBlock, cfg::ControlFlowGraph &cfg) {
+cfg::Instruction *ControlFlowGraphBuilder::createInstruction(Operation *op, cfg::BasicBlock *parentBlock, cfg::ControlFlowGraph &cfg) {
   if (!op || !parentBlock) return nullptr;
 
   auto inst = std::make_unique<cfg::Instruction>(getNextInstructionId(), op, parentBlock);
@@ -451,188 +426,30 @@ cfg::Instruction *BuildCFGPass::createInstruction(Operation *op, cfg::BasicBlock
 
 std::unique_ptr<cfg::ControlFlowGraph>
 ControlFlowGraphBuilder::build(triton::FuncOp func) {
-  // 创建 CFG
   auto cfg = std::make_unique<cfg::ControlFlowGraph>(func);
+
   if (func.getBody().empty()) {
+    // 空函数，只创建入口和出口
+    auto *entry = cfg->createBasicBlock(BlockType::ENTRY);
+    auto *exit = cfg->createBasicBlock(BlockType::EXIT);
+    cfg->addEdge(entry, exit);
     return cfg;
   }
 
-  // 创建入口块和出口块
-  auto *entryBlock = cfg->createBasicBlock(cfg::BlockType::ENTRY);
+  // 创建入口块
+  auto *entryBlock = cfg->createBasicBlock(BlockType::ENTRY);
   cfg->setEntryBlock(entryBlock);
-  auto *exitBlock = cfg->createBasicBlock(cfg::BlockType::EXIT);
+
+  // 创建出口块
+  auto *exitBlock = cfg->createBasicBlock(BlockType::EXIT);
   cfg->setExitBlock(exitBlock);
 
-  // 为函数体构建 CFG - 递归处理所有操作
-  cfg::BasicBlock *currentBB = entryBlock;
-  cfg::BasicBlock *lastBlock = entryBlock;
-
-  // 遍历函数体的所有 block
-  for (Block &block : func.getBody()) {
-    // 遍历 block 中的所有操作
-    for (Operation &op : block) {
-      // 检查是否是控制流操作
-      if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
-        // 创建 if 条件块
-        auto *ifCondBB = cfg->createBasicBlock(cfg::BlockType::IF_COND, nullptr);
-        auto inst = std::make_unique<cfg::Instruction>(0, &op, ifCondBB);
-        cfg::Instruction *instPtr = inst.get();
-        ifCondBB->addInstruction(std::move(inst));
-        cfg->addOpToInstruction(&op, instPtr);
-        cfg->addEdge(currentBB, ifCondBB);
-
-        // 创建汇合块
-        auto *mergeBB = cfg->createBasicBlock(cfg::BlockType::NORMAL, nullptr);
-
-        // 处理 then 分支
-        cfg::BasicBlock *thenExitBB = nullptr;
-        if (!ifOp.getThenRegion().empty()) {
-          auto *thenEntryBB = cfg->createBasicBlock(cfg::BlockType::NORMAL, ifCondBB);
-          cfg->addEdge(ifCondBB, thenEntryBB);
-          // 简化：递归处理 then region
-          for (Block &thenBlock : ifOp.getThenRegion()) {
-            for (Operation &thenOp : thenBlock) {
-              auto inst = std::make_unique<cfg::Instruction>(0, &thenOp, thenEntryBB);
-              cfg::Instruction *instPtr = inst.get();
-              thenEntryBB->addInstruction(std::move(inst));
-              cfg->addOpToInstruction(&thenOp, instPtr);
-            }
-          }
-          thenExitBB = thenEntryBB;
-        }
-
-        // 处理 else 分支
-        bool hasElse = !ifOp.getElseRegion().empty();
-        cfg::BasicBlock *elseExitBB = nullptr;
-        if (hasElse) {
-          auto *elseEntryBB = cfg->createBasicBlock(cfg::BlockType::NORMAL, ifCondBB);
-          cfg->addEdge(ifCondBB, elseEntryBB);
-          // 简化：递归处理 else region
-          for (Block &elseBlock : ifOp.getElseRegion()) {
-            for (Operation &elseOp : elseBlock) {
-              auto inst = std::make_unique<cfg::Instruction>(0, &elseOp, elseEntryBB);
-              cfg::Instruction *instPtr = inst.get();
-              elseEntryBB->addInstruction(std::move(inst));
-              cfg->addOpToInstruction(&elseOp, instPtr);
-            }
-          }
-          elseExitBB = elseEntryBB;
-        }
-
-        // 连接到汇合块
-        if (thenExitBB) {
-          cfg->addEdge(thenExitBB, mergeBB);
-        } else {
-          cfg->addEdge(ifCondBB, mergeBB);
-        }
-
-        if (hasElse) {
-          if (elseExitBB) {
-            cfg->addEdge(elseExitBB, mergeBB);
-          } else {
-            cfg->addEdge(ifCondBB, mergeBB);
-          }
-        } else {
-          cfg->addEdge(ifCondBB, mergeBB);
-        }
-
-        currentBB = mergeBB;
-      }
-      else if (auto forOp = dyn_cast<scf::ForOp>(op)) {
-        // 创建 for 条件块
-        auto *forCondBB = cfg->createBasicBlock(cfg::BlockType::FOR_COND, nullptr);
-        auto inst = std::make_unique<cfg::Instruction>(0, &op, forCondBB);
-        cfg::Instruction *instPtr = inst.get();
-        forCondBB->addInstruction(std::move(inst));
-        cfg->addOpToInstruction(&op, instPtr);
-        cfg->addEdge(currentBB, forCondBB);
-
-        // 创建循环体入口块
-        auto *loopBodyEntryBB = cfg->createBasicBlock(cfg::BlockType::LOOP_BODY, forCondBB);
-        cfg->addEdge(forCondBB, loopBodyEntryBB);
-
-        // 创建循环出口块
-        auto *loopExitBB = cfg->createBasicBlock(cfg::BlockType::LOOP_EXIT, nullptr);
-
-        // 简化：处理循环体
-        for (Block &bodyBlock : forOp.getRegion()) {
-          for (Operation &bodyOp : bodyBlock) {
-            auto inst = std::make_unique<cfg::Instruction>(0, &bodyOp, loopBodyEntryBB);
-            cfg::Instruction *instPtr = inst.get();
-            loopBodyEntryBB->addInstruction(std::move(inst));
-            cfg->addOpToInstruction(&bodyOp, instPtr);
-          }
-        }
-
-        // 回边
-        cfg->addEdge(loopBodyEntryBB, forCondBB);
-        // 出口边
-        cfg->addEdge(forCondBB, loopExitBB);
-
-        currentBB = loopExitBB;
-      }
-      else if (auto whileOp = dyn_cast<scf::WhileOp>(op)) {
-        // 创建 while 条件块
-        auto *whileCondBB = cfg->createBasicBlock(cfg::BlockType::WHILE_COND, nullptr);
-        auto inst = std::make_unique<cfg::Instruction>(0, &op, whileCondBB);
-        cfg::Instruction *instPtr = inst.get();
-        whileCondBB->addInstruction(std::move(inst));
-        cfg->addOpToInstruction(&op, instPtr);
-        cfg->addEdge(currentBB, whileCondBB);
-
-        // 创建 before 区域（条件计算）
-        auto *beforeEntryBB = cfg->createBasicBlock(cfg::BlockType::LOOP_BODY, whileCondBB);
-        cfg->addEdge(whileCondBB, beforeEntryBB);
-
-        // 创建 after 区域（循环体）
-        auto *afterEntryBB = cfg->createBasicBlock(cfg::BlockType::LOOP_BODY, whileCondBB);
-
-        // 创建循环出口块
-        auto *loopExitBB = cfg->createBasicBlock(cfg::BlockType::LOOP_EXIT, nullptr);
-
-        // 简化：处理 before 和 after 区域
-        for (Block &beforeBlock : whileOp.getBefore()) {
-          for (Operation &beforeOp : beforeBlock) {
-            auto inst = std::make_unique<cfg::Instruction>(0, &beforeOp, beforeEntryBB);
-            cfg::Instruction *instPtr = inst.get();
-            beforeEntryBB->addInstruction(std::move(inst));
-            cfg->addOpToInstruction(&beforeOp, instPtr);
-          }
-        }
-
-        for (Block &afterBlock : whileOp.getAfter()) {
-          for (Operation &afterOp : afterBlock) {
-            auto inst = std::make_unique<cfg::Instruction>(0, &afterOp, afterEntryBB);
-            cfg::Instruction *instPtr = inst.get();
-            afterEntryBB->addInstruction(std::move(inst));
-            cfg->addOpToInstruction(&afterOp, instPtr);
-          }
-        }
-
-        // before 区域有两个出口：真→after，假→exit
-        cfg->addEdge(beforeEntryBB, afterEntryBB);
-        cfg->addEdge(beforeEntryBB, loopExitBB);
-
-        // after 区域回到 while 头
-        cfg->addEdge(afterEntryBB, whileCondBB);
-
-        currentBB = loopExitBB;
-      }
-      else {
-        // 普通操作，添加到当前块
-        auto inst = std::make_unique<cfg::Instruction>(0, &op, currentBB);
-        cfg::Instruction *instPtr = inst.get();
-        currentBB->addInstruction(std::move(inst));
-        cfg->addOpToInstruction(&op, instPtr);
-      }
-    }
-
-    lastBlock = currentBB;
-  }
+  // 为函数体构建 CFG
+  auto result = buildForRegion(func.getBody(), *cfg, entryBlock, nullptr);
 
   // 连接函数体出口到函数出口
-  if (lastBlock) {
-    cfg->addEdge(lastBlock, exitBlock);
+  if (result.exitBlock) {
+    cfg->addEdge(result.exitBlock, exitBlock);
   }
 
   return cfg;
