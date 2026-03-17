@@ -232,7 +232,7 @@ cfg::BasicBlock *BuildCFGPass::processBlock(Block &block, cfg::ControlFlowGraph 
     else if (op.getNumRegions() > 0) {
       // 有内部区域的 Triton 操作 (如 tt.reduce, tt.scan 等)
       // 先创建指令
-      auto *inst = createInstruction(&op, currentBB);
+      auto *inst = createInstruction(&op, currentBB, cfg);
 
       // 为该操作创建子图
       auto subGraph = std::make_unique<cfg::ControlFlowGraph>(cfg.getFunction());

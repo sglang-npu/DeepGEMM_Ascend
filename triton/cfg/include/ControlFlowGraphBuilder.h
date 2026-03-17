@@ -92,7 +92,7 @@ protected:
                                   cfg::BasicBlock *parentStructure = nullptr);
 
   // 创建一个新的指令并添加到 basic block
-  cfg::Instruction *createInstruction(Operation *op, cfg::BasicBlock *parentBlock);
+  cfg::Instruction *createInstruction(Operation *op, cfg::BasicBlock *parentBlock, cfg::ControlFlowGraph &cfg);
 
   // 获取下一个指令 ID
   size_t getNextInstructionId() { return nextInstructionId++; }
