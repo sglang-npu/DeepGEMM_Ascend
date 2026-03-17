@@ -28,6 +28,7 @@
 #include "mlir/IR/Region.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
+#include "TritonToCFG/MemorySSA.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallVector.h"
@@ -51,7 +52,7 @@ class ControlFlowGraph;
 class Instruction {
 public:
   Instruction(size_t id, Operation *op, BasicBlock *parentBlock)
-      : id(id), operation(op), parentBlock(parentBlock) {}
+      : id(id), operation(op), parentBlock(parentBlock), memorySSAInfo() {}
 
   // 获取基本信息
   size_t getId() const { return id; }
@@ -72,11 +73,16 @@ public:
   void print(raw_ostream &os, unsigned indent = 0) const;
   void dump() const;
 
+  // Memory SSA信息
+  MemorySSAInfo& getMemorySSAInfo() { return memorySSAInfo; }
+  const MemorySSAInfo& getMemorySSAInfo() const { return memorySSAInfo; }
+
 private:
   size_t id;                    // 唯一ID
   Operation *operation;         // 对应的 MLIR Operation
   BasicBlock *parentBlock;      // 所属的 BasicBlock
   std::unique_ptr<ControlFlowGraph> subGraph;  // 子图（用于 reduce 等有内部区域的操作）
+  MemorySSAInfo memorySSAInfo;  // Memory SSA信息（用于tensor/pointer分析）
 };
 
 // 基本块类型

@@ -126,32 +126,20 @@ public:
   }
 
 private:
-  DenseMap<Value, Value> aliasMap;              // ptr -> base ptr
-  DenseMap<Value, TensorObject*> baseTensorMap; // value -> tensor
-};
-
-// AliasAnalyzer - Alias分析的具体实现
-class AliasAnalyzer {
-public:
-  AliasAnalyzer(AliasAnalysis& aliasAnalysis) : aliasAnalysis(aliasAnalysis) {}
-
-  // 分析函数参数中的指针
-  void analyzeFunctionArguments(ControlFlowGraph& cfg);
-
   // 分析addptr操作
-  void analyzeAddPtrOp(mlir::triton::AddPtrOp addptrOp, Instruction* inst);
+  void analyzeAddPtrOp(mlir::triton::AddPtrOp addptrOp);
 
   // 分析make_tensor_ptr操作
-  void analyzeMakeTensorPtrOp(mlir::triton::MakeTensorPtrOp op, Instruction* inst);
+  void analyzeMakeTensorPtrOp(mlir::triton::MakeTensorPtrOp op);
 
   // 分析load操作
-  void analyzeLoadOp(mlir::triton::LoadOp loadOp, Instruction* inst);
+  void analyzeLoadOp(mlir::triton::LoadOp loadOp);
 
   // 分析store操作
-  void analyzeStoreOp(mlir::triton::StoreOp storeOp, Instruction* inst);
+  void analyzeStoreOp(mlir::triton::StoreOp storeOp);
 
-private:
-  AliasAnalysis& aliasAnalysis;
+  DenseMap<Value, Value> aliasMap;              // ptr -> base ptr
+  DenseMap<Value, TensorObject*> baseTensorMap; // value -> tensor
 };
 
 } // namespace cfg

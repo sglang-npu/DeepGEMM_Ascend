@@ -32,6 +32,13 @@ namespace mlir {
 namespace triton {
 namespace cfg {
 
+// Compute类型（用于指令分类）
+enum class ComputeType {
+  CUBE,    // shape为2维
+  VECTOR,  // shape为1维
+  SCALAR   // 其他标量
+};
+
 // TensorObject - Tensor对象定义
 class TensorObject {
 public:
@@ -43,18 +50,11 @@ public:
     UB              // Unified Buffer
   };
 
-  // Compute类型（用于指令分类）
-  enum class ComputeType {
-    CUBE,    // shape为2维
-    VECTOR,  // shape为1维
-    SCALAR   // 其他标量
-  };
-
   // 构造函数
-  TensorObject(StringRef name, ArrayRef<int64_t> shape, Type type,
+  TensorObject(StringRef name, ArrayRef<int64_t> shape, Type type, Type elementType,
                TensorKind kind = TensorKind::GLOBAL_MEMORY)
       : name(name.str()), shape(shape.begin(), shape.end()),
-        type(type), kind(kind) {}
+        type(type), elementType(elementType), kind(kind) {}
 
   // 获取tensor名称
   const std::string& getName() const { return name; }
@@ -74,12 +74,11 @@ public:
   // 设置tensor种类
   void setKind(TensorKind newKind) { kind = newKind; }
 
-  // 根据shape确定compute类型
-  ComputeType getComputeType() const {
-    if (shape.size() == 2) return ComputeType::CUBE;
-    if (shape.size() == 1) return ComputeType::VECTOR;
-    return ComputeType::SCALAR;
-  }
+  // 获取元素数据类型
+  Type getElementType() const { return elementType; }
+
+  // 设置元素数据类型
+  void setElementType(Type newElementType) { elementType = newElementType; }
 
   // 获取维度数
   size_t getRank() const { return shape.size(); }
@@ -109,7 +108,7 @@ public:
       if (i > 0) os << ", ";
       os << shape[i];
     }
-    os << "], kind=" << getKindString() << "]";
+    os << "], element=" << elementType << ", kind=" << getKindString() << "]";
   }
 
   // 获取kind的字符串表示
@@ -126,9 +125,32 @@ public:
 private:
   std::string name;          // Tensor名称，如"gm_obj_0"
   SmallVector<int64_t> shape;
-  Type type;
+  Type type;                 // 完整类型（如tensor<64x64xf32>）
+  Type elementType;          // 元素数据类型（如f32, i8, f16等）
   TensorKind kind;
 };
+
+// 从类型中提取shape和element type
+inline void extractShapeAndElementType(Type type, SmallVectorImpl<int64_t>& shape,
+                                       Type& elementType) {
+  if (auto rankedType = type.dyn_cast<RankedTensorType>()) {
+    shape.append(rankedType.getShape().begin(), rankedType.getShape().end());
+    elementType = rankedType.getElementType();
+  } else if (auto ptrType = type.dyn_cast<triton::PointerType>()) {
+    Type pointeeType = ptrType.getPointeeType();
+    if (auto rankedType = pointeeType.dyn_cast<RankedTensorType>()) {
+      shape.append(rankedType.getShape().begin(),
+                   rankedType.getShape().end());
+      elementType = rankedType.getElementType();
+    } else {
+      // 标量指针
+      elementType = pointeeType;
+    }
+  } else {
+    // 默认值
+    elementType = type;
+  }
+}
 
 } // namespace cfg
 } // namespace triton

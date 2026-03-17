@@ -45,7 +45,7 @@ public:
   MemorySSABuilder(ControlFlowGraph &cfg, AliasAnalysis &aliasAnalysis,
                    DataFlowInfo &dataFlowInfo)
       : cfg(cfg), aliasAnalysis(aliasAnalysis),
-        dataFlowInfo(dataFlowInfo), nextVersionId(1) {}
+        dataFlowInfo(dataFlowInfo), nextVersionId(1), nextTensorId(0) {}
 
   ~MemorySSABuilder();
 
@@ -74,17 +74,11 @@ private:
   void processWhileOp(scf::WhileOp whileOp, Instruction* inst,
                       BasicBlock *beforeEntryBB, BasicBlock *afterEntryBB);
 
-  // 合并前驱的数据流信息（处理phi节点）
-  void mergePredecessorDataFlow(BasicBlock *bb);
-
   // 判断是否是tensor类型
   bool isTensorType(Type type) const {
     return type.isa<RankedTensorType>() ||
            type.isa<triton::PointerType>();
   }
-
-  // 判断是否需要创建新的tensor对象
-  bool shouldCreateNewTensorObject(Operation* op) const;
 
   // 根据操作创建tensor对象
   TensorObject* createTensorObject(Operation* op);
@@ -100,20 +94,24 @@ private:
     return op == nullptr;  // 入参的defOp为nullptr
   }
 
-  // 判断是否是写入操作（会创建新definition）
+  // 判断是否是返回新Tensor的操作（根据返回值类型判断，排除load）
+  bool isTensorWriter(Operation* op) const;
+
+  // 判断是否是修改内存的操作（有副作用）
   bool isMemoryWriter(Operation* op) const {
-    // 包括：tt.store（写入内存）、tt.trans（创建新tensor）、tt.dot等
-    return isa<triton::StoreOp, triton::TransOp, triton::DotOp,
-               triton::MakeTensorPtrOp>(op);
+    // 只有：tt.store（写入内存）
+    return isa<triton::StoreOp>(op);
   }
 
-  // 判断是否是读取操作
+  // 判断是否是修改读取的操作（有副作用）
   bool isMemoryReader(Operation* op) const {
-    return isa<triton::LoadOp, triton::DotOp>(op);
+    // 只有：tt.store（写入内存）
+    return isa<triton::LoadOp>(op);
   }
 
-  // 判断是否是指针别名操作（不改变base）
-  bool isAliasOp(Operation* op) const {
+  // 判断是否是创建指针的操作
+  bool isPointerOp(Operation* op) const {
+    // 返回指针类型：addptr（偏移指针）、make_tensor_ptr（创建张量指针）
     return isa<triton::AddPtrOp, triton::MakeTensorPtrOp>(op);
   }
 
@@ -130,10 +128,11 @@ private:
   ControlFlowGraph &cfg;
   AliasAnalysis &aliasAnalysis;
   DataFlowInfo &dataFlowInfo;
-  size_t nextVersionId;  // 下一个可用的版本号
+  size_t nextVersionId;  // 下一个可用的版本号（用于MemorySSADef）
+  size_t nextTensorId;   // 下一个可用的tensor ID（用于TensorObject命名）
 
   // 所有创建的definitions（用于内存管理）
-  SmallVector<Definition*> allDefinitions;
+  SmallVector<MemorySSADef*> allDefinitions;
 
   // tensor对象缓存
   DenseMap<Value, TensorObject*> tensorObjectCache;
@@ -157,7 +156,7 @@ Operation* getYieldOp(Region &region);
 std::string createUniqueTensorName(StringRef prefix, size_t id);
 
 // 判断是否需要为操作创建新版本
-bool shouldCreateNewVersion(Operation *op, Definition *currentDef);
+bool shouldCreateNewVersion(Operation *op, MemorySSADef *currentDef);
 }
 
 } // namespace cfg

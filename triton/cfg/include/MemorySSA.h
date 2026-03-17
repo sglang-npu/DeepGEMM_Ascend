@@ -33,14 +33,14 @@ namespace triton {
 namespace cfg {
 
 // Forward declarations
-class Definition;
-class Use;
+class MemorySSADef;
+class MemorySSAUse;
 
 // Memory SSA Definition - 表示tensor/pointer的定义
-class Definition {
+class MemorySSADef {
 public:
   // 构造函数
-  Definition(TensorObject* tensor, Operation* defOp, unsigned version = 0)
+  MemorySSADef(TensorObject* tensor, Operation* defOp, unsigned version = 0)
       : tensor(tensor), defOp(defOp), version(version) {}
 
   // 获取tensor对象
@@ -87,17 +87,17 @@ private:
 };
 
 // Memory SSA Use - 表示tensor/pointer的使用
-class Use {
+class MemorySSAUse {
 public:
   // 构造函数
-  Use(Definition* definition, Operation* userOp, unsigned operandIdx)
+  MemorySSAUse(MemorySSADef* definition, Operation* userOp, unsigned operandIdx)
       : definition(definition), userOp(userOp), operandIdx(operandIdx) {
     // 缓存value以提高查询性能
     operandValue = userOp->getOperand(operandIdx);
   }
 
   // 获取使用的definition
-  Definition* getDefinition() const { return definition; }
+  MemorySSADef* getDefinition() const { return definition; }
 
   // 获取使用该definition的操作
   Operation* getUserOp() const { return userOp; }
@@ -127,14 +127,14 @@ public:
   }
 
 private:
-  Definition* definition;    // 使用的definition
+  MemorySSADef* definition;    // 使用的definition
   Operation* userOp;        // 使用该definition的操作
   unsigned operandIdx;      // operand序号
   Value operandValue;       // 缓存的operand value
 };
 
-// LoopPhiInfo - 循环Phi信息
-struct LoopPhiInfo {
+// PhiInfo - 循环Phi信息
+struct PhiInfo {
   // Phi类型
   enum Type {
     ITER_ARG,   // scf.for的iter_arg
@@ -147,15 +147,15 @@ struct LoopPhiInfo {
 
   // Phi值的来源
   struct {
-    Definition *initialValue;  // 初始值（初始iteration）
-    Definition *yieldValue;    // yield的值（后续iteration）
+    MemorySSADef *initialValue;  // 初始值（初始iteration）
+    MemorySSADef *yieldValue;    // yield的值（后续iteration）
   } comingFrom;
 
   // 是否是第一次迭代
   bool isInitial() const { return comingFrom.yieldValue == nullptr; }
 
   // 获取当前definition（根据上下文决定）
-  Definition* getCurrentDefinition(int iteration) const {
+  MemorySSADef* getCurrentDefinition(int iteration) const {
     return (iteration == 0) ? comingFrom.initialValue
                            : comingFrom.yieldValue;
   }
@@ -164,10 +164,10 @@ struct LoopPhiInfo {
 // MemorySSAInfo - 指令的Memory SSA信息
 struct MemorySSAInfo {
   // 指令的operands使用的definitions
-  SmallVector<Use> uses;
+  SmallVector<MemorySSAUse> uses;
 
   // 指令的results创建的definitions
-  SmallVector<Definition*> definitions;
+  SmallVector<MemorySSADef*> definitions;
 
   // Alias信息（仅对pointer相关操作）
   struct AliasInfo {
@@ -188,7 +188,7 @@ struct MemorySSAInfo {
     return false;
   }
 
-  Definition* getDefinition(Value value) const {
+  MemorySSADef* getDefinition(Value value) const {
     // 查找该value在results中的索引
     for (auto result : llvm::enumerate(value.getDefiningOp()->getResults())) {
       if (result.value() == value) {
@@ -203,7 +203,7 @@ struct MemorySSAInfo {
   }
 
   bool hasUse(Value value) const {
-    for (const Use& use : uses) {
+    for (const MemorySSAUse& use : uses) {
       if (use.getValue() == value) {
         return true;
       }
@@ -211,9 +211,9 @@ struct MemorySSAInfo {
     return false;
   }
 
-  SmallVector<Use> getUses(Value value) const {
-    SmallVector<Use> result;
-    for (const Use& use : uses) {
+  SmallVector<MemorySSAUse> getUses(Value value) const {
+    SmallVector<MemorySSAUse> result;
+    for (const MemorySSAUse& use : uses) {
       if (use.getValue() == value) {
         result.push_back(use);
       }
@@ -226,7 +226,7 @@ struct MemorySSAInfo {
 
   // 判断是否是写入操作
   bool isMemoryWriter() const {
-    for (Definition* def : definitions) {
+    for (MemorySSADef* def : definitions) {
       if (def && !def->isParameter()) {
         return true;
       }
@@ -235,14 +235,14 @@ struct MemorySSAInfo {
   }
 
   // 遍历定义
-  void forEachDefinition(llvm::function_ref<void(Definition*)> func) const {
-    for (Definition* def : definitions) {
+  void forEachDefinition(llvm::function_ref<void(MemorySSADef*)> func) const {
+    for (MemorySSADef* def : definitions) {
       if (def) func(def);
     }
   }
 
-  void forEachUse(llvm::function_ref<void(const Use&)> func) const {
-    for (const Use& use : uses) {
+  void forEachUse(llvm::function_ref<void(const MemorySSAUse&)> func) const {
+    for (const MemorySSAUse& use : uses) {
       if (use.getDefinition()) func(use);
     }
   }
@@ -258,13 +258,13 @@ struct MemorySSAInfo {
   void print(llvm::raw_ostream& os) const {
     os << "MemorySSAInfo[\n";
     os << "  Uses: " << uses.size() << "\n";
-    for (const Use& use : uses) {
+    for (const MemorySSAUse& use : uses) {
       os << "    ";
       use.print(os);
       os << "\n";
     }
     os << "  Definitions: " << definitions.size() << "\n";
-    for (Definition* def : definitions) {
+    for (MemorySSADef* def : definitions) {
       if (def) {
         os << "    ";
         def->print(os);

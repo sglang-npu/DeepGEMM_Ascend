@@ -274,7 +274,34 @@ bool ControlFlowGraph::isBackEdge(BasicBlock *from, BasicBlock *to) const {
 }
 
 void ControlFlowGraph::traverse(BlockVisitor visitor) {
-  for (auto &bb : basicBlocks) {
+  // 从入口块开始进行拓扑排序
+  std::vector<BasicBlock *> topoOrder;
+  DenseSet<BasicBlock *> visited;
+
+  // 使用DFS进行拓扑排序
+  std::function<void(BasicBlock *)> dfs = [&](BasicBlock *bb) {
+    if (!bb || visited.contains(bb))
+      return;
+
+    visited.insert(bb);
+
+    // 递归访问所有后继块
+    for (BasicBlock *succ : bb->getSuccessors()) {
+      dfs(succ);
+    }
+
+    // 在后序位置添加，最后需要反转
+    topoOrder.push_back(bb);
+  };
+
+  // 从入口块开始DFS
+  dfs(entryBlock);
+
+  // 反转得到拓扑序
+  std::reverse(topoOrder.begin(), topoOrder.end());
+
+  // 按照拓扑序遍历
+  for (BasicBlock *bb : topoOrder) {
     visitor(*bb);
   }
 }

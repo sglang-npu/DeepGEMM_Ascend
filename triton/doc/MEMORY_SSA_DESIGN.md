@@ -26,8 +26,9 @@ public:
   // Tensor类型分类
   enum class TensorKind {
     GLOBAL_MEMORY,  // 全局内存tensor（如gm_obj）
-    LOCAL_MEMORY,   // 共享内存tensor
-    REGISTER        // 寄存器tensor
+    L1,             // CUBE片上1级缓存
+    L0,             // CUBE片上0级缓存
+    UB,             // VECTOR片上缓存
   };
 
   // Compute类型（用于指令分类）
