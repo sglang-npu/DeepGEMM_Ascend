@@ -20,13 +20,13 @@
  * THE SOFTWARE.
  */
 
-#include "TritonToCFG/Passes.h"
-#include "TritonToCFG/ControlFlowGraphBuilder.h"
+#include "TritonToGraph/Passes.h"
+#include "ControlFlowGraphBuilder.h"
 
 #include "mlir/Pass/PassRegistry.h"
 
 #define GEN_PASS_REGISTRATION
-#include "ascend/include/TritonToCFG/Passes.h.inc"
+#include "ascend/include/TritonToGraph/Passes.h.inc"
 
 namespace mlir {
 namespace triton {

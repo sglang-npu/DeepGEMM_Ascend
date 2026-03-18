@@ -35,7 +35,7 @@ def BuildCFG : Pass<"build-cfg", "mlir::ModuleOp"> {
     The output files will be named as <function_name>_cfg.<ext> and placed in
     the directory specified by the output-dir option.
   }];
-  let constructor = "mlir::triton::createBuildCFGPass()";
+  let constructor = "mlir::triton::cfg::createBuildCFGPass()";
   let options = [
     Option<"output-dir", "outputDir", "std::string", "\".\"",
            "Directory where CFG files will be generated">,

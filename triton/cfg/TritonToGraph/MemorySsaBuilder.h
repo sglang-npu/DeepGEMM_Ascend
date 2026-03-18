@@ -23,9 +23,8 @@
 #ifndef TRITON_TO_CFG_MEMORY_SSA_BUILDER_H
 #define TRITON_TO_CFG_MEMORY_SSA_BUILDER_H
 
-#include "TritonToCFG/memory_ssa.h"
-#include "TritonToCFG/alias_analysis.h"
-#include "TritonToCFG/ControlFlowGraph.h"
+#include "MemorySSA.h"
+#include "AliasAnalysis.h"
 #include "mlir/IR/Types.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "llvm/ADT/DenseMap.h"
@@ -37,6 +36,8 @@ namespace cfg {
 
 // 前向声明
 class DataFlowInfo;
+class ControlFlowGraph;
+class Instruction;
 
 // MemorySSABuilder - Memory SSA构建器
 // 构建整个CFG的Memory SSA信息，包括创建definitions、uses、处理控制流phi节点
@@ -76,18 +77,18 @@ private:
 
   // 判断是否是tensor类型
   bool isTensorType(Type type) const {
-    return type.isa<RankedTensorType>() ||
-           type.isa<triton::PointerType>();
+    return mlir::isa<RankedTensorType>(type) ||
+           mlir::isa<triton::PointerType>(type);
   }
 
   // 根据操作创建tensor对象
   TensorObject* createTensorObject(Operation* op);
 
   // 创建tensor definition
-  Definition* createDefinition(TensorObject* tensor, Operation* op);
+  MemorySSADef* createDefinition(TensorObject* tensor, Operation* op);
 
   // 创建use
-  Use createUse(Definition* def, Operation* userOp, unsigned operandIdx);
+  MemorySSAUse createUse(MemorySSADef* def, Operation* userOp, unsigned operandIdx);
 
   // 判断是否是入参
   bool isParameter(Operation* op) const {

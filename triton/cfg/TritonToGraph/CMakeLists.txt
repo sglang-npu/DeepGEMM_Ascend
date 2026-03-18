@@ -1,4 +1,4 @@
-add_triton_library(TritonToCFG
+add_triton_library(TritonToGraph
   AliasAnalysis.cpp
   ControlFlowGraph.cpp
   ControlFlowGraphBuilder.cpp
@@ -8,7 +8,7 @@ add_triton_library(TritonToCFG
   Passes.cpp
 
   DEPENDS
-  TritonToCFGPassIncGen
+  TritonToGraphPassIncGen
 
   LINK_LIBS PUBLIC
   MLIRArithDialect

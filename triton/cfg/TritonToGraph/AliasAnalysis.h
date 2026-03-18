@@ -29,12 +29,13 @@
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/Triton/IR/Types.h"
 #include "llvm/ADT/DenseMap.h"
-#include "TritonToCFG/tensor.h"
-#include "TritonToCFG/ControlFlowGraph.h"
+#include "tensor.h"
 
 namespace mlir {
 namespace triton {
 namespace cfg {
+
+class ControlFlowGraph;
 
 // AliasAnalysis - Alias分析和指针跟踪
 // 用于分析pointer的alias关系，跟踪全局内存对象（如gm_obj）的别名链
@@ -65,7 +66,7 @@ public:
 
   // 判断是否是指针类型
   static bool isPointerType(Type type) {
-    if (auto ptrType = type.dyn_cast<triton::PointerType>()) {
+    if (auto ptrType = mlir::dyn_cast<triton::PointerType>(type)) {
       return true;
     }
     return false;
@@ -73,18 +74,18 @@ public:
 
   // 判断是否是tensor pointer类型（指向tensor的指针）
   static bool isTensorPointerType(Type type) {
-    if (auto ptrType = type.dyn_cast<triton::PointerType>()) {
+    if (auto ptrType = mlir::dyn_cast<triton::PointerType>(type)) {
       Type pointeeType = ptrType.getPointeeType();
-      return pointeeType.isa<RankedTensorType>();
+      return mlir::isa<RankedTensorType>(pointeeType);
     }
     return false;
   }
 
   // 判断是否是标量指针类型（指向标量的指针）
   static bool isScalarPointerType(Type type) {
-    if (auto ptrType = type.dyn_cast<triton::PointerType>()) {
+    if (auto ptrType = mlir::dyn_cast<triton::PointerType>(type)) {
       Type pointeeType = ptrType.getPointeeType();
-      return !pointeeType.isa<RankedTensorType>();
+      return !mlir::isa<RankedTensorType>(pointeeType);
     }
     return false;
   }
@@ -93,7 +94,7 @@ public:
   static bool isGlobalMemoryType(Type type) {
     // 在Triton中，全局内存通常由!tt.ptr类型表示
     // 可以进一步根据地址空间等信息判断
-    if (auto ptrType = type.dyn_cast<triton::PointerType>()) {
+    if (auto ptrType = mlir::dyn_cast<triton::PointerType>(type)) {
       // 地址空间1通常是全局内存
       // 需要根据具体硬件进行调整
       return ptrType.getAddressSpace() == 1 || ptrType.getAddressSpace() == 0;

@@ -20,8 +20,8 @@
  * THE SOFTWARE.
  */
 
-#include "TritonToCFG/InterProceduralCFG.h"
-#include "TritonToCFG/ControlFlowGraphBuilder.h"
+#include "InterProceduralCFG.h"
+#include "ControlFlowGraphBuilder.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"

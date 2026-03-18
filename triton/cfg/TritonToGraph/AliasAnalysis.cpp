@@ -20,11 +20,11 @@
  * THE SOFTWARE.
  */
 
-#include "TritonToCFG/AliasAnalysis.h"
-#include "TritonToCFG/memory_ssa.h"
-#include "TritonToCFG/Tensor.h"
+#include "AliasAnalysis.h"
+#include "MemorySSA.h"
+#include "ControlFlowGraph.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
-#include "triton/Dialect/Triton/IR/Ops.h"
+#include "triton/Dialect/Triton/IR/OpInterfaces.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 

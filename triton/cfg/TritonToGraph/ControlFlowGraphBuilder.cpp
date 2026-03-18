@@ -20,8 +20,8 @@
  * THE SOFTWARE.
  */
 
-#include "TritonToCFG/ControlFlowGraphBuilder.h"
-#include "TritonToCFG/DataflowGraph.h"
+#include "ControlFlowGraphBuilder.h"
+#include "DataflowGraph.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
@@ -114,6 +114,7 @@ void BuildCFGPass::runOnOperation() {
     dataFlowGraph.build();
 
     // 导出 DataFlowGraph
+    std::error_code ec;
     llvm::SmallString<128> dataflowPath(outputPath);
     llvm::sys::path::append(dataflowPath, baseName + "_dataflow.json");
     llvm::raw_fd_ostream dfOs(dataflowPath, ec);
@@ -484,6 +485,6 @@ ControlFlowGraphBuilder::buildForModule(ModuleOp module) {
   return cfgs;
 }
 
-std::unique_ptr<OperationPass<ModuleOp>> triton::createBuildCFGPass() {
+std::unique_ptr<OperationPass<ModuleOp>> mlir::triton::cfg::createBuildCFGPass() {
   return std::unique_ptr<OperationPass<ModuleOp>>(new BuildCFGPass());
 }

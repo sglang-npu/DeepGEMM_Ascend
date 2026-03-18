@@ -20,11 +20,12 @@
  * THE SOFTWARE.
  */
 
-#include "TritonToCFG/MemorySsaBuilder.h"
-#include "TritonToCFG/ControlFlowGraph.h"
-#include "TritonToCFG/Tensor.h"
+#include "MemorySsaBuilder.h"
+#include "ControlFlowGraph.h"
+#include "DataflowGraph.h"
+#include "tensor.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
-#include "triton/Dialect/Triton/IR/Ops.h"
+#include "triton/Dialect/Triton/IR/OpInterfaces.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -229,7 +230,7 @@ void MemorySSABuilder::processInstruction(Instruction* inst) {
         dataFlowInfo.addMemoryDefinition(result, ptrDef);
 
         LLVM_DEBUG(llvm::dbgs()
-                   << "    Load creates new def: " << newDef->getId()
+                   << "    Load creates new def: " << ptrDef->getId()
                    << " from " << ptrDef->getId() << "\n");
       }
     }
@@ -385,11 +386,11 @@ void MemorySSABuilder::processForOp(scf::ForOp forOp, Instruction* inst,
 
   LLVM_DEBUG(llvm::dbgs() << "Processing ForOp: " << forOp << "\n");
 
-  unsigned numIterArgs = forOp.getNumIterOperands();
+  unsigned numIterArgs = forOp.getInitArgs().size();
 
   for (unsigned i = 0; i < numIterArgs; i++) {
     Value iterArg = forOp.getRegionIterArg(i);
-    Value initValue = forOp.getIterOperands()[i];
+    Value initValue = forOp.getInitArgs()[i];
 
     // 查找initValue的definition
     MemorySSADef* initDef = dataFlowInfo.getMemoryDefinition(initValue);
@@ -499,6 +500,9 @@ std::string MemorySSABuilder::getOpName(Operation* op) const {
 // MemorySSABuilderHelper
 //===----------------------------------------------------------------------===//
 
+namespace mlir {
+namespace triton {
+namespace cfg {
 namespace MemorySSABuilderHelper {
 
 Type getResultType(Operation* op, unsigned resultIdx) {
@@ -510,7 +514,7 @@ SmallVector<int64_t> getShapeFromValue(Value value) {
   Type type = value.getType();
   SmallVector<int64_t> shape;
 
-  if (auto rankedType = type.dyn_cast<RankedTensorType>()) {
+  if (auto rankedType = mlir::dyn_cast<RankedTensorType>(type)) {
     shape.append(rankedType.getShape().begin(),
                  rankedType.getShape().end());
   }
@@ -553,6 +557,9 @@ bool shouldCreateNewVersion(Operation* op, MemorySSADef* currentDef) {
   return false;
 }
 
+}
+}
+}
 } // namespace MemorySSABuilderHelper
 
 // 判断是否是返回新Tensor的操作（根据返回值类型判断，排除load）
@@ -563,9 +570,9 @@ bool MemorySSABuilder::isTensorWriter(Operation* op) const {
   for (Value result : op->getResults()) {
     Type resultType = result.getType();
     // 如果是RankedTensorType（不是指针），则是TensorWriter
-    if (resultType.isa<RankedTensorType>()) {
+    if (mlir::isa<RankedTensorType>(resultType)) {
       // 但排除load（虽然load返回tensor，但它是从内存读取，不是"写入"或"创建"）
-      if (isa<triton::LoadOp>(op)) return false;
+      if (mlir::isa<triton::LoadOp>(op)) return false;
       return true;
     }
   }

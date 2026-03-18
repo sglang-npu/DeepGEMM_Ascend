@@ -26,7 +26,8 @@
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
 #include "llvm/ADT/SmallVector.h"
-#include "TritonToCFG/tensor.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "tensor.h"
 
 namespace mlir {
 namespace triton {
@@ -35,6 +36,9 @@ namespace cfg {
 // Forward declarations
 class MemorySSADef;
 class MemorySSAUse;
+
+class BasicBlock;
+class ControlFlowGraph;
 
 // Memory SSA Definition - 表示tensor/pointer的定义
 class MemorySSADef {
@@ -178,14 +182,18 @@ struct MemorySSAInfo {
 
   // 快速查询接口
   bool hasDefinition(Value value) const {
-    // 查找该value是否在results中
-    for (size_t i = 0; i < definitions.size(); ++i) {
-      if (i < value.getParentRegion()->getOpResults().size() &&
-          value.getParentRegion()->getOpResults()[i] == value) {
-        return definitions[i] != nullptr;
+      // 通过 getDefiningOp() 获取定义该 value 的操作
+      Operation* defOp = value.getDefiningOp();
+      if (!defOp) return false;
+      
+      // 获取该操作的所有 results
+      auto results = defOp->getResults();
+      for (size_t i = 0; i < definitions.size() && i < results.size(); ++i) {
+          if (results[i] == value) {
+              return definitions[i] != nullptr;
+          }
       }
-    }
-    return false;
+      return false;
   }
 
   MemorySSADef* getDefinition(Value value) const {

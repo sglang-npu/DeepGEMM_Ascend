@@ -23,8 +23,10 @@
 #ifndef TRITON_TO_CFG_DATAFLOW_GRAPH_H
 #define TRITON_TO_CFG_DATAFLOW_GRAPH_H
 
-#include "TritonToCFG/memory_ssa.h"
-#include "TritonToCFG/ControlFlowGraph.h"
+#include "MemorySSA.h"
+#include "ControlFlowGraph.h"
+#include "MemorySsaBuilder.h"
+#include "AliasAnalysis.h"
 #include "mlir/IR/Value.h"
 #include "mlir/IR/Operation.h"
 #include "llvm/ADT/DenseMap.h"
@@ -35,10 +37,6 @@
 namespace mlir {
 namespace triton {
 namespace cfg {
-
-// 前向声明
-class AliasAnalysis;
-class MemorySSABuilder;
 
 // 前向声明结果类
 class DataFlowResult;
@@ -110,6 +108,9 @@ public:
     return Phis;
   }
 
+  // 构建def-use缓存
+  void buildDefUseCache() const;
+
   // 打印信息（调试用）
   void print(llvm::raw_ostream& os) const;
 
@@ -128,8 +129,6 @@ private:
   mutable DenseMap<MemorySSADef*, SmallVector<MemorySSAUse>> defUseCache;
   mutable bool defUseCacheValid = false;
 
-  // 构建def-use缓存
-  void buildDefUseCache() const;
   void invalidateDefUseCache() { defUseCacheValid = false; defUseCache.clear(); }
 };
 

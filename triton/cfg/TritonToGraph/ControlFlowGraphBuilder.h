@@ -23,7 +23,7 @@
 #ifndef TRITON_TO_CFG_CONTROL_FLOW_GRAPH_BUILDER_H
 #define TRITON_TO_CFG_CONTROL_FLOW_GRAPH_BUILDER_H
 
-#include "TritonToCFG/ControlFlowGraph.h"
+#include "ControlFlowGraph.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -34,6 +34,7 @@
 
 namespace mlir {
 namespace triton {
+namespace cfg {
 
 // 构建控制流图的 Pass
 class BuildCFGPass
@@ -115,6 +116,7 @@ private:
 // 创建 Pass 的工厂函数
 std::unique_ptr<OperationPass<mlir::ModuleOp>> createBuildCFGPass();
 
+}
 } // namespace triton
 } // namespace mlir
 

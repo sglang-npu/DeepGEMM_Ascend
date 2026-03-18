@@ -20,9 +20,9 @@
  * THE SOFTWARE.
  */
 
-#include "TritonToCFG/DataflowGraph.h"
-#include "TritonToCFG/AliasAnalysis.h.h"
-#include "TritonToCFG/ControlFlowGraph.h"
+#include "DataflowGraph.h"
+#include "AliasAnalysis.h"
+#include "ControlFlowGraph.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -198,9 +198,9 @@ void DataFlowInfo::exportToJSON(llvm::raw_ostream& os) const {
   }
   os << "\n  },\n";
 
-  os << "  \"loopPhis\": {\n";
+  os << "  \"Phis\": {\n";
   first = true;
-  for (const auto& entry : loopPhis) {
+  for (const auto& entry : Phis) {
     if (!first) os << ",\n";
     first = false;
     os << "    \"" << entry.first << "\": {\n";
@@ -255,7 +255,8 @@ void DataFlowGraph::dump() const {
 }
 
 void DataFlowGraph::exportToJSON(llvm::raw_ostream& os) const {
-  auto funcName = const_cast<triton::FuncOp&>(cfg.getFunction()).getName();
+  auto funcOp = cfg.getFunction();
+  auto funcName = funcOp.getName();
   std::string funcNameStr = funcName.empty() ? "unnamed" : funcName.str();
 
   os << "{\n";

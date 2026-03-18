@@ -23,7 +23,7 @@
 #ifndef TRITON_TO_CFG_INTER_PROCEDURAL_CFG_H
 #define TRITON_TO_CFG_INTER_PROCEDURAL_CFG_H
 
-#include "TritonToCFG/ControlFlowGraph.h"
+#include "ControlFlowGraph.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Operation.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"

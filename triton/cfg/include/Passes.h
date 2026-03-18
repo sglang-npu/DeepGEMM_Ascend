@@ -28,6 +28,7 @@
 
 namespace mlir {
 namespace triton {
+namespace cfg {
 
 // 创建 BuildCFG pass 的工厂函数
 std::unique_ptr<OperationPass<mlir::ModuleOp>> createBuildCFGPass();
@@ -36,6 +37,7 @@ std::unique_ptr<OperationPass<mlir::ModuleOp>> createBuildCFGPass();
 #define GEN_PASS_REGISTRATION
 #include "ascend/include/TritonToCFG/Passes.h.inc"
 
+}
 } // namespace triton
 } // namespace mlir
 

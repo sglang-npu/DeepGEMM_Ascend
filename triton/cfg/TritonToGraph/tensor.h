@@ -24,9 +24,11 @@
 #define TRITON_TO_CFG_TENSOR_H
 
 #include "mlir/IR/Types.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "triton/Dialect/Triton/IR/Types.h"
 
 namespace mlir {
 namespace triton {
@@ -133,12 +135,12 @@ private:
 // 从类型中提取shape和element type
 inline void extractShapeAndElementType(Type type, SmallVectorImpl<int64_t>& shape,
                                        Type& elementType) {
-  if (auto rankedType = type.dyn_cast<RankedTensorType>()) {
+  if (auto rankedType = mlir::dyn_cast<RankedTensorType>(type)) {
     shape.append(rankedType.getShape().begin(), rankedType.getShape().end());
     elementType = rankedType.getElementType();
-  } else if (auto ptrType = type.dyn_cast<triton::PointerType>()) {
+  } else if (auto ptrType = mlir::dyn_cast<triton::PointerType>(type)) {
     Type pointeeType = ptrType.getPointeeType();
-    if (auto rankedType = pointeeType.dyn_cast<RankedTensorType>()) {
+    if (auto rankedType = mlir::dyn_cast<RankedTensorType>(pointeeType)) {
       shape.append(rankedType.getShape().begin(),
                    rankedType.getShape().end());
       elementType = rankedType.getElementType();
