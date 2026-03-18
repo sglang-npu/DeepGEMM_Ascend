@@ -61,7 +61,7 @@ public:
   // 获取唯一标识: tensor_name,version 或 tensor_name,param
   std::string getId() const {
     return tensor->getName() + "," +
-           (defOp ? std::to_string(version) : "param");
+           (defOp ? std::to_string(version) : std::to_string(0));
   }
 
   // 判断是否是入参（函数参数）

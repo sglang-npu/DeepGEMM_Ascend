@@ -67,7 +67,7 @@ void BuildCFGPass::runOnOperation() {
     }
 
     // 打印 CFG 到标准输出
-    cfg->print(llvm::outs());
+    //cfg->print(llvm::outs());
 
     // 导出到文件
     std::string baseName = func.getName().str();

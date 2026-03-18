@@ -26,6 +26,7 @@
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
 #include "mlir/IR/Types.h"
+#include "mlir/IR/TypeUtilities.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/Triton/IR/Types.h"
 #include "llvm/ADT/DenseMap.h"
@@ -138,6 +139,12 @@ private:
 
   // 分析store操作
   void analyzeStoreOp(mlir::triton::StoreOp storeOp);
+
+  // 分析broadcast操作
+  void analyzeBroadcastOp(mlir::triton::BroadcastOp broadcastOp);
+
+  // 分析splat操作
+  void analyzeSplatOp(mlir::triton::SplatOp splatOp);
 
   DenseMap<Value, Value> aliasMap;              // ptr -> base ptr
   DenseMap<Value, TensorObject*> baseTensorMap; // value -> tensor
