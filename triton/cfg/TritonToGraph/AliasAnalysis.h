@@ -67,7 +67,7 @@ public:
 
   // 判断是否是指针类型
   static bool isPointerType(Type type) {
-    if (auto ptrType = mlir::dyn_cast<triton::PointerType>(type)) {
+    if (auto ptrType = mlir::dyn_cast<triton::PointerType>(getElementTypeOrSelf(type))) {
       return true;
     }
     return false;

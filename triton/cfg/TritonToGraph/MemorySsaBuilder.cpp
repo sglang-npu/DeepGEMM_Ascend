@@ -230,6 +230,7 @@ void MemorySSABuilder::processInstruction(Instruction* inst) {
       // 获取ptr的definition
       MemorySSADef* ptrDef = dataFlowInfo.getMemoryDefinition(ptr);
       if (ptrDef) {
+        ssaInfo.definitions.push_back(ptrDef);
         dataFlowInfo.addMemoryDefinition(result, ptrDef);
 
         LLVM_DEBUG(llvm::dbgs()
@@ -593,6 +594,9 @@ bool MemorySSABuilder::isTensorWriter(Operation* op) const {
       if (isPointerBroadcastOrSplat(op)) 
         return false;
 
+      if (auto ptrType = mlir::dyn_cast<triton::PointerType>(getElementTypeOrSelf(resultType))) {
+        return false;
+    }
       return true;
     }
   }
