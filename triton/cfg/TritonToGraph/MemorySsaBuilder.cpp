@@ -121,6 +121,9 @@ void MemorySSABuilder::createParameterDefinitions() {
                                  TensorObject::TensorKind::GLOBAL_MEMORY);
       }
 
+      tensor->print(llvm::outs());
+      llvm::outs() << "\n";
+
       // 为入参创建definition
       MemorySSADef* def = createDefinition(tensor, nullptr);
 
@@ -140,7 +143,12 @@ void MemorySSABuilder::processBasicBlock(BasicBlock* bb) {
   // 处理block内的所有指令
   for (auto& instPtr : bb->getInstructions()) {
     Instruction* inst = instPtr.get();
+    inst->print(llvm::outs());
+    llvm::outs() << "\n";
     processInstruction(inst);
+    MemorySSAInfo& ssaInfo = inst->getMemorySSAInfo();
+    ssaInfo.print(llvm::outs());
+    llvm::outs() << "\n";
   }
 }
 
@@ -202,11 +210,6 @@ void MemorySSABuilder::processInstruction(Instruction* inst) {
           TensorObject* tensor = oldDef->getTensor();
           MemorySSADef* newDef = createDefinition(tensor, op);
 
-          // store的ptr使用旧的definition作为use
-          MemorySSAUse use = createUse(oldDef, op, 0);
-          ssaInfo.uses.push_back(use);
-          dataFlowInfo.addMemoryUse(ptr, use);
-
           // store之后，ptr指向的内存状态改变，更新definition
           dataFlowInfo.addMemoryDefinition(ptr, newDef);
 
@@ -258,7 +261,7 @@ void MemorySSABuilder::processInstruction(Instruction* inst) {
       }
     }
   }
-  // 对pointer操作（addptr, make_tensor_ptr）
+  // 对pointer操作（addptr, make_tensor_ptr, [broadcast, splat]）
   else if (isPointerOp(op)) {
     LLVM_DEBUG(llvm::dbgs() << "    Pointer operation: " << op->getName() << "\n");
 
@@ -267,9 +270,6 @@ void MemorySSABuilder::processInstruction(Instruction* inst) {
 
       // 检查是否是pointer类型
       if (aliasAnalysis.isPointerType(resultType)) {
-        // 创建tensor对象
-        TensorObject* tensor = createTensorObject(op);
-
         // Pointer op：复用base pointer的definition（alias）
         Value basePtr = aliasAnalysis.getBasePointer(result);
         MemorySSADef* baseDef = dataFlowInfo.getMemoryDefinition(basePtr);
@@ -445,7 +445,7 @@ void MemorySSABuilder::processForOp(scf::ForOp forOp, Instruction* inst,
 
 
 MemorySSADef* MemorySSABuilder::createDefinition(TensorObject* tensor, Operation* op) {
-  unsigned version = isParameter(op) ? 0 : nextVersionId++;
+  unsigned version = isParameter(op) ? 0 : ++nextVersion[tensor];
   auto* def = new MemorySSADef(tensor, op, version);
   allDefinitions.push_back(def);
   return def;
@@ -462,9 +462,6 @@ TensorObject* MemorySSABuilder::createTensorObject(Operation* op) {
   // 根据操作创建tensor对象，使用独立的Tensor ID确保唯一性
   std::string name = getOpName(op);
   Type resultType = op->getResultTypes().front();
-
-  // 递增Tensor ID，确保每个tensor都有唯一名称
-  nextTensorId++;
 
   SmallVector<int64_t> shape;
   Type elementType;
@@ -485,7 +482,7 @@ TensorObject* MemorySSABuilder::createTensorObject(Operation* op) {
   return tensor;
 }
 
-std::string MemorySSABuilder::getOpName(Operation* op) const {
+std::string MemorySSABuilder::getOpName(Operation* op) {
   if (!op) return "unknown";
 
   // 基于操作类型和独立的Tensor ID生成名称
@@ -493,7 +490,7 @@ std::string MemorySSABuilder::getOpName(Operation* op) const {
   std::replace(opName.begin(), opName.end(), '.', '_');
 
   // 使用独立的Tensor ID生成器，确保唯一性
-  return opName + "_tensor_" + std::to_string(nextTensorId);
+  return opName + "_tensor_" + std::to_string(++nextTensor[opName]);
 }
 
 //===----------------------------------------------------------------------===//
@@ -562,6 +559,21 @@ bool shouldCreateNewVersion(Operation* op, MemorySSADef* currentDef) {
 }
 } // namespace MemorySSABuilderHelper
 
+bool MemorySSABuilder::isPointerBroadcastOrSplat(mlir::Operation* op) const
+{
+  if (auto broadcastOp = mlir::dyn_cast<triton::BroadcastOp>(op)) {
+    Type elemType = getElementTypeOrSelf(broadcastOp.getResult().getType());
+    return mlir::isa<triton::PointerType>(elemType);
+  }
+  
+  // 处理 SplatOp: 检查第一个 operand (src) 是否是指针
+  if (auto splatOp = mlir::dyn_cast<triton::SplatOp>(op)) {
+    return mlir::isa<triton::PointerType>(splatOp.getSrc().getType());
+  }
+  
+  return false;
+}
+
 // 判断是否是返回新Tensor的操作（根据返回值类型判断，排除load）
 bool MemorySSABuilder::isTensorWriter(Operation* op) const {
   if (!op || op->getNumResults() == 0) return false;
@@ -572,7 +584,15 @@ bool MemorySSABuilder::isTensorWriter(Operation* op) const {
     // 如果是RankedTensorType（不是指针），则是TensorWriter
     if (mlir::isa<RankedTensorType>(resultType)) {
       // 但排除load（虽然load返回tensor，但它是从内存读取，不是"写入"或"创建"）
-      if (mlir::isa<triton::LoadOp>(op)) return false;
+      if (mlir::isa<triton::LoadOp>(op) || mlir::isa<triton::StoreOp>(op)) 
+        return false;
+      
+      if (mlir::isa<scf::IfOp, scf::ForOp, scf::WhileOp>(op))
+        return false;
+
+      if (isPointerBroadcastOrSplat(op)) 
+        return false;
+
       return true;
     }
   }

@@ -46,15 +46,12 @@ public:
   MemorySSABuilder(ControlFlowGraph &cfg, AliasAnalysis &aliasAnalysis,
                    DataFlowInfo &dataFlowInfo)
       : cfg(cfg), aliasAnalysis(aliasAnalysis),
-        dataFlowInfo(dataFlowInfo), nextVersionId(1), nextTensorId(0) {}
+        dataFlowInfo(dataFlowInfo) {}
 
   ~MemorySSABuilder();
 
   // 构建整个CFG的Memory SSA
   void build();
-
-  // 获取下一个版本ID
-  size_t getNextVersionId() const { return nextVersionId; }
 
 private:
   // 处理单个BasicBlock
@@ -113,8 +110,16 @@ private:
   // 判断是否是创建指针的操作
   bool isPointerOp(Operation* op) const {
     // 返回指针类型：addptr（偏移指针）、make_tensor_ptr（创建张量指针）
-    return isa<triton::AddPtrOp, triton::MakeTensorPtrOp>(op);
+    if(isa<triton::AddPtrOp, triton::MakeTensorPtrOp>(op))
+      return true;
+
+    if(isPointerBroadcastOrSplat(op))
+      return true;
+
+    return false;
   }
+
+  bool isPointerBroadcastOrSplat(mlir::Operation* op) const;
 
   // 创建函数的参数定义
   void createParameterDefinitions();
@@ -123,14 +128,17 @@ private:
   TensorObject* getOrCreateTensorObject(Value value);
 
   // 获取操作的字符串名称（用于生成tensor名称）
-  std::string getOpName(Operation* op) const;
+  std::string getOpName(Operation* op);
 
   // 成员变量
   ControlFlowGraph &cfg;
   AliasAnalysis &aliasAnalysis;
   DataFlowInfo &dataFlowInfo;
-  size_t nextVersionId;  // 下一个可用的版本号（用于MemorySSADef）
-  size_t nextTensorId;   // 下一个可用的tensor ID（用于TensorObject命名）
+  //size_t nextVersionId;  // 下一个可用的版本号（用于MemorySSADef）
+  //size_t nextTensorId;   // 下一个可用的tensor ID（用于TensorObject命名）
+
+  std::map<TensorObject*, size_t> nextVersion;
+  std::map<std::string, size_t> nextTensor;
 
   // 所有创建的definitions（用于内存管理）
   SmallVector<MemorySSADef*> allDefinitions;

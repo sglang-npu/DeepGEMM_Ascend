@@ -221,7 +221,7 @@ void DataFlowGraph::build() {
   // 步骤1: 构建Alias分析
   aliasAnalysis = std::make_unique<AliasAnalysis>();
   aliasAnalysis->analyzePointerAliases(cfg);
-  aliasAnalysis->print(llvm::outs());
+  //aliasAnalysis->print(llvm::outs());
 
   LLVM_DEBUG(llvm::dbgs() << "Alias analysis complete" << "\n");
 

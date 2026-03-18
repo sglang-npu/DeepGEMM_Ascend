@@ -49,9 +49,19 @@ std::string Instruction::getAsString() const {
 }
 
 void Instruction::print(raw_ostream &os, unsigned indent) const {
-  os.indent(indent) << "Inst[" << id << "]: ";
+  std::string instStr = getAsString();
+  os << "Inst[" << id << "]: ";
+
   if (operation) {
-    os << getAsString() << "\n";
+    BlockType parentType = parentBlock->getType();
+    if (parentType == BlockType::IF_COND || parentType == BlockType::FOR_COND || 
+        parentType == BlockType::WHILE_COND) {
+      size_t newlinePos = instStr.find('\n');
+      if (newlinePos != std::string::npos) {
+        instStr = instStr.substr(0, newlinePos) + " ...";
+      }
+    }
+    os.indent(indent) << instStr;
   } else {
     os << "<null>\n";
   }
