@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
  */
 
 #ifndef TRITON_TO_GRAPH_GRAPH_ANALYSIS_H
@@ -36,11 +36,7 @@ struct TraversalContext {
   bool isEmpty() const { return structureStack.empty(); }
 };
 
-//===----------------------------------------------------------------------===//
-// Curly Recursive Template Pattern for CFG Traversal
-//===----------------------------------------------------------------------===//
-
-/// CFGTraversalBase - CFG 遍历基类（Curly Recursive 模板模式）
+/// CFGTraversalBase - CFG 遍历基类
 /// 用户继承此类，实现 preVisit/postVisit 回调
 /// 可在子类中添加自定义状态字段
 class CFGTraversalBase {
@@ -48,20 +44,13 @@ public:
   virtual ~CFGTraversalBase() = default;
 
   // 访问基本块前调用，返回 false 则跳过此块
-  virtual bool preVisitBlock(BasicBlock* block, TraversalContext& ctx) {
-    return true;
-  }
+  virtual bool preVisitBlock(BasicBlock* block, TraversalContext& ctx);
 
   // 访问基本块后调用
   virtual void postVisitBlock(BasicBlock* block, TraversalContext& ctx) {}
 
-  // 访问指令前调用，返回 false 则跳过此指令
-  virtual bool preVisitInstruction(Instruction* inst, TraversalContext& ctx) {
-    return true;
-  }
-
   // 访问指令后调用
-  virtual void postVisitInstruction(Instruction* inst, TraversalContext& ctx) {}
+  virtual void VisitInstruction(Instruction* inst, TraversalContext& ctx) {}
 
   // 遇到控制流结构（for/if/while）时调用
   virtual void onEnterStructure(BasicBlock* structure, TraversalContext& ctx) {}
@@ -100,17 +89,6 @@ public:
   /// 从指定块反向 BFS
   void bfsBackward(BasicBlock* start, CFGTraversalBase& visitor);
 
-  //===----------------------------------------------------------------------===
-  // Range-based Traversal (遍历特定范围)
-  //===----------------------------------------------------------------------===
-
-  /// 遍历指定块内的所有指令
-  void traverseBlockInstructions(BasicBlock* block, CFGTraversalBase& visitor);
-
-  /// 遍历块区间 [start, end]（按块顺序）
-  void traverseBlockRange(BasicBlock* start, BasicBlock* end,
-                          CFGTraversalBase& visitor);
-
 private:
   ControlFlowGraph& cfg;
 
@@ -130,20 +108,10 @@ public:
   virtual ~DFGTTraversalBase() = default;
 
   // 访问定义前调用（反向遍历 value -> def）
-  virtual bool preVisitDef(Value value, Operation* defOp, int depth) {
-    return true;
-  }
-
-  // 访问定义后调用
-  virtual void postVisitDef(Value value, Operation* defOp, int depth) {}
+  virtual bool VisitDef(Value value, Operation* defOp, int depth);
 
   // 访问使用前调用（正向遍历 value -> use）
-  virtual bool preVisitUse(Value value, OpOperand* use, int depth) {
-    return true;
-  }
-
-  // 访问使用后调用
-  virtual void postVisitUse(Value value, OpOperand* use, int depth) {}
+  virtual bool VisitUse(Value value, OpOperand* use, int depth);
 
   // 遇到 phi/iter_arg 时调用
   virtual void onPhi(Value phiValue, const PhiInfo& phiInfo, int depth) {}
@@ -206,10 +174,10 @@ private:
 
   void dfsBackwardImpl(Value value, DFGTraversalBase& visitor,
                        DenseSet<Operation*>& visited,
-                       TraversalContext& ctx, const Options& opts, int depth);
+                       const Options& opts, int depth);
   void dfsForwardImpl(Value value, DFGTraversalBase& visitor,
                       DenseSet<Operation*>& visited,
-                      TraversalContext& ctx, const Options& opts, int depth);
+                      const Options& opts, int depth);
 };
 
 //===----------------------------------------------------------------------===//

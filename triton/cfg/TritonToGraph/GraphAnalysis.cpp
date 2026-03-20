@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
  */
 
 #include "GraphAnalysis.h"
@@ -37,8 +37,7 @@ void CFGTraverser::dfsForwardImpl(BasicBlock* block,
   visited.insert(block);
 
   // pre-visit block
-  if (!visitor.preVisitBlock(block, ctx))
-    return;
+  visitor.preVisitBlock(block, ctx);
 
   // visit instructions in block
   for (auto& instPtr : block->getInstructions()) {
@@ -50,9 +49,7 @@ void CFGTraverser::dfsForwardImpl(BasicBlock* block,
       ctx.push(block);
     }
 
-    if (visitor.preVisitInstruction(inst, ctx)) {
-      visitor.postVisitInstruction(inst, ctx);
-    }
+    visitor.VisitInstruction(inst, ctx);
 
     // check for structure exit (last instruction in structure block)
     if (inst->hasSubGraph()) {
@@ -92,16 +89,13 @@ void CFGTraverser::dfsBackwardImpl(BasicBlock* block,
 
   visited.insert(block);
 
-  if (!visitor.preVisitBlock(block, ctx))
-    return;
+  visitor.preVisitBlock(block, ctx);
 
   // visit instructions in reverse order
   auto& insts = block->getInstructions();
   for (auto it = insts.rbegin(); it != insts.rend(); ++it) {
     Instruction* inst = it->get();
-    if (visitor.preVisitInstruction(inst, ctx)) {
-      visitor.postVisitInstruction(inst, ctx);
-    }
+    visitor.VisitInstruction(inst, ctx);
   }
 
   // visit predecessors
@@ -129,14 +123,11 @@ void CFGTraverser::bfsForward(BasicBlock* start, CFGTraversalBase& visitor) {
   while (!worklist.empty()) {
     auto [block, ctx] = worklist.pop_back_val();
 
-    if (!visitor.preVisitBlock(block, const_cast<TraversalContext&>(ctx)))
-      continue;
+    preVisitBlock(block, const_cast<TraversalContext&>(ctx));
 
     for (auto& instPtr : block->getInstructions()) {
       Instruction* inst = instPtr.get();
-      if (visitor.preVisitInstruction(inst, const_cast<TraversalContext&>(ctx))) {
-        visitor.postVisitInstruction(inst, const_cast<TraversalContext&>(ctx));
-      }
+      visitor.VisitInstruction(inst, const_cast<TraversalContext&>(ctx));
     }
 
     visitor.postVisitBlock(block, const_cast<TraversalContext&>(ctx));
@@ -160,14 +151,11 @@ void CFGTraverser::bfsBackward(BasicBlock* start, CFGTraversalBase& visitor) {
   while (!worklist.empty()) {
     auto [block, ctx] = worklist.pop_back_val();
 
-    if (!visitor.preVisitBlock(block, const_cast<TraversalContext&>(ctx)))
-      continue;
+    visitor.preVisitBlock(block, const_cast<TraversalContext&>(ctx))
 
-    for (auto& instPtr : block->getInstructions()) {
-      Instruction* inst = instPtr.get();
-      if (visitor.preVisitInstruction(inst, const_cast<TraversalContext&>(ctx))) {
-        visitor.postVisitInstruction(inst, const_cast<TraversalContext&>(ctx));
-      }
+    for (auto it = insts.rbegin(); it != insts.rend(); ++it) {
+      Instruction* inst = it->get();
+      visitor.VisitInstruction(inst, ctx);
     }
 
     visitor.postVisitBlock(block, const_cast<TraversalContext&>(ctx));
@@ -181,17 +169,6 @@ void CFGTraverser::bfsBackward(BasicBlock* start, CFGTraversalBase& visitor) {
   }
 }
 
-void CFGTraverser::traverseBlockInstructions(BasicBlock* block,
-                                              CFGTraversalBase& visitor) {
-  TraversalContext ctx;
-  for (auto& instPtr : block->getInstructions()) {
-    Instruction* inst = instPtr.get();
-    if (visitor.preVisitInstruction(inst, ctx)) {
-      visitor.postVisitInstruction(inst, ctx);
-    }
-  }
-}
-
 //===----------------------------------------------------------------------===//
 // DFGTraverser Implementation
 //===----------------------------------------------------------------------===//
@@ -199,22 +176,19 @@ void CFGTraverser::traverseBlockInstructions(BasicBlock* block,
 void DFGTraverser::dfsBackward(Value seed, DFGTraversalBase& visitor,
                                 const Options& opts) {
   DenseSet<Operation*> visited;
-  TraversalContext ctx;
-  dfsBackwardImpl(seed, visitor, visited, ctx, opts, 0);
+  dfsBackwardImpl(seed, visitor, visited, pts, 0);
 }
 
 void DFGTraverser::dfsBackward(ArrayRef<Value> seeds, DFGTraversalBase& visitor,
                                 const Options& opts) {
   DenseSet<Operation*> visited;
-  TraversalContext ctx;
   for (Value seed : seeds) {
-    dfsBackwardImpl(seed, visitor, visited, ctx, opts, 0);
+    dfsBackwardImpl(seed, visitor, visited, opts, 0);
   }
 }
 
 void DFGTraverser::dfsBackwardImpl(Value value, DFGTraversalBase& visitor,
                                     DenseSet<Operation*>& visited,
-                                    TraversalContext& ctx,
                                     const Options& opts, int depth) {
   if (opts.maxDepth >= 0 && depth > opts.maxDepth)
     return;
@@ -241,12 +215,11 @@ void DFGTraverser::dfsBackwardImpl(Value value, DFGTraversalBase& visitor,
 
   visited.insert(defOp);
 
-  if (!visitor.preVisitDef(value, defOp, depth))
-    return;
+  visitor.VisitDef(value, defOp, depth);
 
   // recursively visit operands
   for (Value operand : defOp->getOperands()) {
-    dfsBackwardImpl(operand, visitor, visited, ctx, opts, depth + 1);
+    dfsBackwardImpl(operand, visitor, visited, opts, depth + 1);
   }
 
   // handle phi/iter_arg
@@ -257,20 +230,16 @@ void DFGTraverser::dfsBackwardImpl(Value value, DFGTraversalBase& visitor,
       visitor.onPhi(value, phiInfo, depth);
     }
   }
-
-  visitor.postVisitDef(value, defOp, depth);
 }
 
 void DFGTraverser::dfsForward(Value seed, DFGTraversalBase& visitor,
                                const Options& opts) {
   DenseSet<Operation*> visited;
-  TraversalContext ctx;
   dfsForwardImpl(seed, visitor, visited, ctx, opts, 0);
 }
 
 void DFGTraverser::dfsForwardImpl(Value value, DFGTraversalBase& visitor,
                                    DenseSet<Operation*>& visited,
-                                   TraversalContext& ctx,
                                    const Options& opts, int depth) {
   if (opts.maxDepth >= 0 && depth > opts.maxDepth)
     return;
@@ -295,15 +264,12 @@ void DFGTraverser::dfsForwardImpl(Value value, DFGTraversalBase& visitor,
 
     visited.insert(userOp);
 
-    if (!visitor.preVisitUse(value, use, depth))
-      continue;
+    visitor.VisitUse(value, use, depth);
 
     // visit results of this operation
     for (Value result : userOp->getResults()) {
-      dfsForwardImpl(result, visitor, visited, ctx, opts, depth + 1);
+      dfsForwardImpl(result, visitor, visited, opts, depth + 1);
     }
-
-    visitor.postVisitUse(value, use, depth);
   }
 }
 
@@ -381,7 +347,7 @@ bool RegionAnalyzer::hasDependency(const Region& from, const Region& to) const {
 
 SmallVector<RegionAnalyzer::Dependency>
 RegionAnalyzer::getDependencies(const Region& from, const Region& to) const {
-  SmallVector<Dependency> result;
+  SmallVector<Dependency> deps;
 
   // check for data dependencies: from defines, to uses
   for (Instruction* fromInst : from) {
@@ -390,14 +356,14 @@ RegionAnalyzer::getDependencies(const Region& from, const Region& to) const {
         Operation* userOp = use.getOwner();
         if (Instruction* toInst = cfg.getInstruction(userOp)) {
           if (to.contains(toInst)) {
-            result.push_back({Dependency::DATA, result, fromInst, toInst});
+            deps.push_back({Dependency::DATA, result, fromInst, toInst});
           }
         }
       }
     }
   }
 
-  return result;
+  return deps;
 }
 
 RegionAnalyzer::ExternalDeps
@@ -476,14 +442,14 @@ ProgramSlice ProgramSlicer::compute(const SliceCriterion& criterion) {
       SliceBuilder(ProgramSlice& slice, ControlFlowGraph& cfg)
           : slice(slice), cfg(cfg) {}
 
-      bool preVisitDef(Value value, Operation* defOp, int depth) override {
+      bool VisitDef(Value value, Operation* defOp, int depth) override {
         if (Instruction* inst = cfg.getInstruction(defOp)) {
           slice.add(inst);
         }
         return true;
       }
 
-      bool preVisitUse(Value value, OpOperand* use, int depth) override {
+      bool VisitUse(Value value, OpOperand* use, int depth) override {
         Operation* userOp = use->getOwner();
         if (Instruction* inst = cfg.getInstruction(userOp)) {
           slice.add(inst);
