@@ -1,3 +1,5 @@
 *.so
 .vscode/
 deep_gemm_ascend/doc/personal.md
+
+.codemate
