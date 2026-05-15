@@ -135,7 +135,7 @@ int main(int argc, const char **argv)
         // program, device, run_mode==0, m, n, k, layoutTagA, layoutTagB, checkRes
         Run(stream, m, n, k, layoutTagA, layoutTagB, platformInfo, checkRes);
     } else if (run_mode == 1) {
-        // program, device, run_mode==1, m, n, k, layoutTagA, layoutTagB, m1, n1, k1, checkRes
+        // program, device, run_mode==1, m, n, k, layoutTagA, layoutTagB, checkRes, m1, n1, k1
         uint32_t m1 = std::atoi(argv[9]);
         uint32_t n1 = std::atoi(argv[10]);
         uint32_t k1 = std::atoi(argv[11]);
