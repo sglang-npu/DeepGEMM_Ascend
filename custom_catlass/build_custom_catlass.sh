@@ -51,7 +51,7 @@ echo ""
 echo "=========================================="
 echo "步骤 3: 执行构建"
 echo "=========================================="
-bash scripts/build.sh ${EXAMPLE_NAME} 2>&1 | tee "${BUILD_LOG}"
+bash scripts/build.sh 102_dynamic_optimized_matmul ${EXAMPLE_NAME} 2>&1 | tee "${BUILD_LOG}"
 
 echo ""
 echo "=========================================="

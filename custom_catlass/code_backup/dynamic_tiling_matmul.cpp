@@ -20,22 +20,6 @@ enum class RunMode : uint32_t {
     OfflineCache = 3
 };
 
-// static void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k,
-//     LayoutTag layoutTagA, LayoutTag layoutTagB, PlatformInfo &platformInfo,
-//     uint32_t checkRes = 0, uint32_t m1 = 0, uint32_t n1 = 0, uint32_t k1 = 0)
-// {
-//     LayoutTag layoutTagC = LayoutTag::TagRowMajor;
-//     TilingParams tilingParams{m, n, k, layoutTagA, layoutTagB, layoutTagC};
-//     if (m1 == 0 || n1 == 0 || k1 == 0) {
-//         DoTilingAndSelectKernel<fp16_t>(tilingParams, platformInfo);
-//     } else {
-//         tilingParams.m1 = m1;
-//         tilingParams.n1 = n1;
-//         tilingParams.k1 = k1;
-//         DoTilingAndSelectKernelV2<fp16_t>(tilingParams, platformInfo);
-//     }
-// }
-
 bool ParseArgs(int argc, const char **argv, TilingParams &tilingParams, RunMode &runMode, bool &checkRes)
 {
     if (argc < 9) {
@@ -44,17 +28,16 @@ bool ParseArgs(int argc, const char **argv, TilingParams &tilingParams, RunMode 
     }
     uint32_t run_mode = std::atoi(argv[2]);
     runMode = static_cast<RunMode>(run_mode);
+    uint32_t check_res = std::atoi(argv[3]);
+    checkRes = (check_res != 0);
 
-    uint32_t m = std::atoi(argv[3]);
-    uint32_t n = std::atoi(argv[4]);
-    uint32_t k = std::atoi(argv[5]);
-    LayoutTag layoutTagA = static_cast<LayoutTag>(std::atoi(argv[6]));
-    LayoutTag layoutTagB = static_cast<LayoutTag>(std::atoi(argv[7]));
+    uint32_t m = std::atoi(argv[4]);
+    uint32_t n = std::atoi(argv[5]);
+    uint32_t k = std::atoi(argv[6]);
+    LayoutTag layoutTagA = static_cast<LayoutTag>(std::atoi(argv[7]));
+    LayoutTag layoutTagB = static_cast<LayoutTag>(std::atoi(argv[8]));
     LayoutTag layoutTagC = LayoutTag::TagRowMajor;
     tilingParams.SetParams(m, n, k, layoutTagA, layoutTagB, layoutTagC);
-
-    uint32_t check_res = std::atoi(argv[8]);
-    checkRes = (check_res != 0);
 
     switch (runMode) {
         case RunMode::OriginCatlass:
@@ -80,9 +63,10 @@ bool ParseArgs(int argc, const char **argv, TilingParams &tilingParams, RunMode 
 
 }
 
-void DoTiling(TilingParams &tilingParams, const RunMode &runMode)
+bool DoTiling(TilingParams &tilingParams, const RunMode &runMode)
 {
     PlatformInfo platformInfo;
+    bool tilingSucc = false;
 
     switch (runMode) {
         case RunMode::OriginCatlass:
@@ -94,11 +78,13 @@ void DoTiling(TilingParams &tilingParams, const RunMode &runMode)
         case RunMode::OnlinePredict:
             break;
         case RunMode::OfflineCache:
+            tilingSucc = SelectKernelWithCache(tilingParams);
             break;
         default:
             break;
     }
     PrintTilingParams<fp16_t>(tilingParams, platformInfo);
+    return tilingSucc;
 }
 
 void CheckRes(TilingParams &tilingParams, std::vector<fp16_t> &hostA, std::vector<fp16_t> &hostB, std::vector<fp16_t> &hostC)
@@ -215,9 +201,13 @@ int main(int argc, const char **argv)
     RunMode runMode;
     bool checkRes;
     if (!ParseArgs(argc, argv, tilingParams, runMode, checkRes)) {
+        std::cerr << "[DGA] Parse arguments failed." << std::endl;
         return -1;
     }
-    DoTiling(tilingParams, runMode);
+    if (!DoTiling(tilingParams, runMode)) {
+        std::cerr << "[DGA] Get tiling params failed." << std::endl;
+        return -1;
+    }
     RunCompute(stream, tilingParams, runMode, checkRes);
 
     ACL_CHECK(aclrtDestroyStream(stream));
