@@ -6,6 +6,7 @@ Padding计算模块
 
 from enum import IntEnum
 from typing import Tuple
+
 from utils.common import ceil_div, round_up
 
 
@@ -19,7 +20,7 @@ class PaddingTag(IntEnum):
 
 class PaddingCalculator:
     """Padding计算器类"""
-    
+
     @staticmethod
     def estimate_bandwidth(n_value: int, d_value: int, src_d_value: int) -> float:
         """

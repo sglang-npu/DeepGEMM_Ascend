@@ -3,30 +3,20 @@ Small Matmul Tiling 计算器
 封装版本 - 提供简洁的 API 接口
 """
 
-from enum import IntEnum
-from typing import Tuple, Dict, Any
-import sys
-import os
 import importlib.util
+import os
+import sys
 import types
-from utils.common import ceil_div, round_up
-from padding_calculator import PaddingCalculator, PaddingTag
+from enum import IntEnum
+from typing import Any, Dict, Tuple
 
-# ============================================================================
-# 导入 padding_calculator 模块
-#
-# padding_calculator.py 使用了相对导入 (from .utils.common import ...)，
-# 因此需要正确设置包结构才能导入。这里通过以下步骤实现：
-# 1. 添加 benchmark_v2 的父目录到 sys.path
-# 2. 创建 benchmark_v2 和 benchmark_v2.utils 包对象
-# 3. 先导入 utils.common 模块（依赖项）
-# 4. 再导入 padding_calculator 模块
-# ============================================================================
+from padding_calculator import PaddingCalculator, PaddingTag
+from utils.common import ceil_div, round_up
 
 class LayoutTag(IntEnum):
     """矩阵布局标签"""
-    TagRowMajor = 0      # 行主序
-    TagColumnMajor = 1   # 列主序
+    TagRowMajor = 0
+    TagColumnMajor = 1
 
 
 class PlatformInfo:
@@ -703,11 +693,8 @@ class MatmulTilingCalculator:
 # ============================================================================
 
 def main():
-    """使用示例"""
-    # 创建计算器实例
     calculator = MatmulTilingCalculator()
 
-    # 示例 1: 使用默认布局 (RowMajor, RowMajor)
     result1 = calculator.calculate(m=8192, n=8192, k=8192)
     print("示例 1 - (8192, 8192, 8192), RowMajor, RowMajor:")
     print(f"  Tiling: {result1['tiling']}")
@@ -717,21 +704,21 @@ def main():
         print(f"  {key}: {value}")
     print()
 
-    # 示例 2: 使用字符串指定布局
-    result2 = calculator.calculate_str(m=1472, n=64, k=320,
-                                       layout_a="RowMajor",
-                                       layout_b="ColumnMajor")
+    result2 = calculator.calculate_str(
+        m=1472, n=64, k=320,
+        layout_a="RowMajor",
+        layout_b="ColumnMajor"
+    )
     print("示例 2 - (1472, 64, 320), RowMajor, ColumnMajor:")
     print(f"  Tiling: {result2['tiling']}")
     print(f"  算子类型: {result2['operator_type']}")
     print(f"  splitkFactor: {result2['splitkFactor']}")
-    for key, value in result1.items():
+    for key, value in result2.items():
         print(f"  {key}: {value}")
     print()
 
-    # 示例 3: 自定义平台信息
     custom_platform = PlatformInfo()
-    custom_platform.coreNum = 32  # 更多核心
+    custom_platform.coreNum = 32
     calculator.set_platform_info(custom_platform)
 
     result3 = calculator.calculate(m=82014, n=1294, k=1294)
@@ -739,7 +726,7 @@ def main():
     print(f"  Tiling: {result3['tiling']}")
     print(f"  算子类型: {result3['operator_type']}")
     print(f"  平台核心数: {calculator.get_platform_info().coreNum}")
-    for key, value in result1.items():
+    for key, value in result3.items():
         print(f"  {key}: {value}")
     return result1, result2, result3
 

@@ -1,18 +1,17 @@
-import numpy as np
-import torch
-import time
 import argparse
 import random
+import time
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-# 外部依赖（需确保这些模块存在于项目路径中）
+import numpy as np
+import torch
+
 from catlass_parameter import CatlassParameter
 from model import TimePredictMLP
 from padding_calculator import PaddingCalculator, PaddingTag
 from tiling_calculator import MatmulTilingCalculator
 
-# 尝试导入 sklearn，若不可用则 DBSCAN 策略回退
 try:
     from sklearn.cluster import DBSCAN
     SKLEARN_AVAILABLE = True
@@ -39,9 +38,9 @@ VERSION_CONFIG = {
         "hidden_dims_padding": "498, 498, 498, 498, 498, 498, 498, 498, 498",
     },
     "A3": {
-        "hidden_dims_small": "1116,1116,1116,1116,1116,1116,1116,1116,1116",
-        "hidden_dims_common": "242,485,970,1940,3880,1940,970,485,242",
-        "hidden_dims_padding": "5453,2726,1363,681,340,170,85,42,21,17,17,17,17,17,17",
+        "hidden_dims_small": "1116, 1116, 1116, 1116, 1116, 1116, 1116, 1116, 1116",
+        "hidden_dims_common": "242, 485, 970, 1940, 3880, 1940, 970, 485, 242",
+        "hidden_dims_padding": "5453, 2726, 1363, 681, 340, 170, 85, 42, 21, 17, 17, 17, 17, 17, 17",
     }
 }
 # ==================================================
@@ -54,7 +53,7 @@ def parse_args():
         "--model-version",
         type=str,
         choices=["A2", "A3"],
-        default="A3",
+        default="A2",
         help="模型版本：A2 或 A3，指定后自动使用 ./model_{version}/ 下的模型和对应 hidden_dims"
     )
 
@@ -101,8 +100,8 @@ def parse_args():
     parser.add_argument(
         "--hidden-dims-small",
         type=str,
-        default="1116,1116,1116,1116,1116,1116,1116,1116,1116",  # A3
-        help="small MLP隐藏层配置，逗号分隔 (默认: 64, 128, 64)"
+        default="1116, 1116, 1116, 1116, 1116, 1116, 1116, 1116, 1116",
+        help="small MLP隐藏层配置，逗号分隔"
     )
     parser.add_argument(
         "--model-path-common",
@@ -119,8 +118,8 @@ def parse_args():
     parser.add_argument(
         "--hidden-dims-common",
         type=str,
-        default="242,485,970,1940,3880,1940,970,485,242", # A3
-        help="common MLP隐藏层配置，逗号分隔 (默认: 64, 128, 64)"
+        default="242, 485, 970, 1940, 3880, 1940, 970, 485, 242",
+        help="common MLP隐藏层配置，逗号分隔"
     )
     parser.add_argument(
         "--model-path-padding",
@@ -137,8 +136,8 @@ def parse_args():
     parser.add_argument(
         "--hidden-dims-padding",
         type=str,
-        default="5453,2726,1363,681,340,170,85,42,21,17,17,17,17,17,17", # A3
-        help="padding MLP隐藏层配置，逗号分隔 (默认: 64, 128, 64)"
+        default="5453, 2726, 1363, 681, 340, 170, 85, 42, 21, 17, 17, 17, 17, 17, 17",
+        help="padding MLP隐藏层配置，逗号分隔"
     )
     # 解析参数
     args = parser.parse_args()
@@ -194,6 +193,8 @@ class TilingPredictor:
             dbscan_min_samples: int = 2,
             min_tiling: int = 40,
             time_diff_threshold: float = 0.05,
+            layout_tag_a: int = 0,
+            layout_tag_b: int = 1,
     ):
         """
         初始化Tiling预测器
@@ -216,8 +217,8 @@ class TilingPredictor:
         # 初始化Catlass参数生成器
         self.catlass_param_generator = CatlassParameter(
             operator_type=operator_type,
-            layout_tag_a=0,
-            layout_tag_b=1,
+            layout_tag_a=layout_tag_a,
+            layout_tag_b=layout_tag_b,
             core_num=core_num,
         )
         self.selection_method = selection_method
@@ -672,39 +673,45 @@ class GetBestConfig:
         self.args = args
         print(f"{args.model_path_small}")
         self.predictor_small = TilingPredictor(
-        model_path=args.model_path_small,
-        scaler_path=args.scaler_path_small,
-        hidden_dims=parse_hidden_dims(args.hidden_dims_small),
-        operator_type="SmallMatmul",  # 或 None 表示所有算子
-        core_num=24,
-        min_tiling=args.min_tiling,
-        time_diff_threshold=args.time_diff_threshold,
-        selection_method=args.selection_method,
-        selection_topk=args.selection_topk,
+            model_path=args.model_path_small,
+            scaler_path=args.scaler_path_small,
+            hidden_dims=parse_hidden_dims(args.hidden_dims_small),
+            operator_type="SmallMatmul",  # 或 None 表示所有算子
+            core_num=24,
+            min_tiling=args.min_tiling,
+            time_diff_threshold=args.time_diff_threshold,
+            selection_method=args.selection_method,
+            selection_topk=args.selection_topk,
+            layout_tag_a=0,
+            layout_tag_b=0,
         )
         print(f"{args.model_path_common}")
         self.predictor_common = TilingPredictor(
-        model_path=args.model_path_common,
-        scaler_path=args.scaler_path_common,
-        hidden_dims=parse_hidden_dims(args.hidden_dims_common),
-        operator_type="CommonMatmul",  # 或 None 表示所有算子
-        core_num=24,
-        min_tiling=args.min_tiling,
-        time_diff_threshold=args.time_diff_threshold,
-        selection_method=args.selection_method,
-        selection_topk=args.selection_topk,
+            model_path=args.model_path_common,
+            scaler_path=args.scaler_path_common,
+            hidden_dims=parse_hidden_dims(args.hidden_dims_common),
+            operator_type="CommonMatmul",  # 或 None 表示所有算子
+            core_num=24,
+            min_tiling=args.min_tiling,
+            time_diff_threshold=args.time_diff_threshold,
+            selection_method=args.selection_method,
+            selection_topk=args.selection_topk,
+            layout_tag_a=0,
+            layout_tag_b=1,
         )
         print(f"{args.model_path_padding}")
         self.predictor_padding = TilingPredictor(
-        model_path=args.model_path_padding,
-        scaler_path=args.scaler_path_padding,
-        hidden_dims=parse_hidden_dims(args.hidden_dims_padding),
-        operator_type="PaddingCommonMatmul",  # 或 None 表示所有算子
-        core_num=24,
-        min_tiling=args.min_tiling,
-        time_diff_threshold=args.time_diff_threshold,
-        selection_method=args.selection_method,
-        selection_topk=args.selection_topk,
+            model_path=args.model_path_padding,
+            scaler_path=args.scaler_path_padding,
+            hidden_dims=parse_hidden_dims(args.hidden_dims_padding),
+            operator_type="PaddingCommonMatmul",  # 或 None 表示所有算子
+            core_num=24,
+            min_tiling=args.min_tiling,
+            time_diff_threshold=args.time_diff_threshold,
+            selection_method=args.selection_method,
+            selection_topk=args.selection_topk,
+            layout_tag_a=0,
+            layout_tag_b=1,
         )
 
         self.matmul_tiling_calculator = MatmulTilingCalculator()
@@ -719,33 +726,37 @@ class GetBestConfig:
         result = self.matmul_tiling_calculator.calculate(*args)
         # 2.使用训练好的模型寻找最优tiling（包含回退机制）
         if result["operator_type"] == "SmallMatmul":
-           result["predict_tiling"] = self.predictor_small.predict(*shape, result["tiling"])
+            result["predict_tiling"] = self.predictor_small.predict(*shape, result["tiling"])
         elif result["operator_type"] == "CommonMatmul":
             result["predict_tiling"] = self.predictor_common.predict(*shape, result["tiling"])
         elif result["operator_type"] == "PaddingCommonMatmul":
             result["predict_tiling"] = self.predictor_padding.predict(*shape, result["tiling"])
 
         if result.get("predict_tiling") is None:
-            result["predict_tiling"] = dict(zip(['m1', 'n1', 'k1'], result["tiling"]))
+            result["predict_tiling"] = dict(zip(["m1", "n1", "k1"], result["tiling"]))
         else:
-            mapping = {'mTile': 'm1', 'nTile': 'n1', 'kTile': 'k1'}
-            result["predict_tiling"] = {mapping[k]: v * 16 for k, v in result["predict_tiling"].items() if k in mapping}
-            result["block_dim"] = self.matmul_tiling_calculator.calculate_block_dim(m,n,k,
-                                                                                    result["predict_tiling"]['m1'],
-                                                                                    result["predict_tiling"]['n1'],
-                                                                                    result["predict_tiling"]['k1'],
-                                                                                    result["layout"][0],
-                                                                                    result["layout"][1],
-                                                                                    result["paddingTagA"],
-                                                                                    result["paddingTagB"],
-                                                                                    result["splitkFactor"]
-                                                                                    )
+            mapping = {"mTile": "m1", "nTile": "n1", "kTile": "k1"}
+            result["predict_tiling"] = {
+                mapping[k]: v * 16
+                for k, v in result["predict_tiling"].items()
+                if k in mapping
+            }
+            result["block_dim"] = self.matmul_tiling_calculator.calculate_block_dim(
+                m, n, k,
+                result["predict_tiling"]["m1"],
+                result["predict_tiling"]["n1"],
+                result["predict_tiling"]["k1"],
+                result["layout"][0],
+                result["layout"][1],
+                result["paddingTagA"],
+                result["paddingTagB"],
+                result["splitkFactor"],
+            )
         return result
 
 # ===================== main =====================
 def main():
-    # 初始化预测器
-    args= parse_args()
+    args = parse_args()
     get_best_config = GetBestConfig(args)
 
     # 预测任意 M、N、K 的最优 tiling 参数
