@@ -74,8 +74,8 @@ echo "步骤 5: 执行程序"
 echo "=========================================="
 cd ${REPO_DIR}/output/bin
 echo "执行目录: $(pwd)"
-echo "执行命令: ./102_dynamic_optimized_matmul 8 1 16 578 2014 0 0 1 16 64 512"
-./102_dynamic_optimized_matmul 8 1 16 578 2014 0 0 1 16 64 512
+echo "执行程序: 102_dynamic_optimized_matmul"
+./102_dynamic_optimized_matmul 8 1 1 16 578 2014 0 0 16 64 512
 
 echo ""
 echo "=========================================="
