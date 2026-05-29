@@ -185,7 +185,7 @@ class TilingPredictor:
             scaler_path: str,
             hidden_dims: List[int],
             operator_type: Optional[str] = None,
-            core_num: int = 24,
+            core_num: int = 20,
             selection_method: str = "greedy",
             selection_topk: int = 10,
             selector_seed: Optional[int] = None,
@@ -677,7 +677,7 @@ class GetBestConfig:
             scaler_path=args.scaler_path_small,
             hidden_dims=parse_hidden_dims(args.hidden_dims_small),
             operator_type="SmallMatmul",  # 或 None 表示所有算子
-            core_num=24,
+            core_num=20,
             min_tiling=args.min_tiling,
             time_diff_threshold=args.time_diff_threshold,
             selection_method=args.selection_method,
@@ -691,7 +691,7 @@ class GetBestConfig:
             scaler_path=args.scaler_path_common,
             hidden_dims=parse_hidden_dims(args.hidden_dims_common),
             operator_type="CommonMatmul",  # 或 None 表示所有算子
-            core_num=24,
+            core_num=20,
             min_tiling=args.min_tiling,
             time_diff_threshold=args.time_diff_threshold,
             selection_method=args.selection_method,
@@ -705,7 +705,7 @@ class GetBestConfig:
             scaler_path=args.scaler_path_padding,
             hidden_dims=parse_hidden_dims(args.hidden_dims_padding),
             operator_type="PaddingCommonMatmul",  # 或 None 表示所有算子
-            core_num=24,
+            core_num=20,
             min_tiling=args.min_tiling,
             time_diff_threshold=args.time_diff_threshold,
             selection_method=args.selection_method,
