@@ -5,10 +5,10 @@ Catlass参数生成模块
 """
 
 import math
-from typing import List, Dict
+from typing import Dict, List
 
+from padding_calculator import PaddingCalculator, PaddingTag
 from utils.common import ceil_div
-from padding_calculator import PaddingCalculator, PaddingTagdd
 
 
 class CatlassParameter:
@@ -136,9 +136,9 @@ class CatlassParameter:
         
         for m_tile, n_tile, k_tile in self.generate_mnk_tiles_linear():
             param_dict = {
-                'mTile': m_tile,
-                'nTile': n_tile,
-                'kTile': k_tile
+                "mTile": m_tile,
+                "nTile": n_tile,
+                "kTile": k_tile,
             }
             parameters.append(param_dict)
         
@@ -191,8 +191,6 @@ class CatlassParameter:
 
         task_blocks = math.ceil(m / m1) * math.ceil(n / n1)
         return task_blocks <= self.core_num and k <= k1
-
-        return True
 
     def check_padding_common_matmul_constraints(
         self, m, n, k, m1, n1, k1, layout_tag_a=0, layout_tag_b=0
@@ -358,9 +356,9 @@ class CatlassParameter:
         checker = constraint_checkers[operator_type_lower]
         filtered_params = []
         for param in self.grid_parameters:
-            m1 = param['mTile'] * 16
-            n1 = param['nTile'] * 16
-            k1 = param['kTile'] * 16
+            m1 = param["mTile"] * 16
+            n1 = param["nTile"] * 16
+            k1 = param["kTile"] * 16
             if checker(m, n, k, m1, n1, k1, layout_a, layout_b):
                 filtered_params.append(param)
         

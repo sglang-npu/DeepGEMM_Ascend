@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
 
+
 class TimePredictMLP(nn.Module):
     def __init__(self, input_dim=6, hidden_dims=[64, 32, 16]):
-        super(TimePredictMLP, self).__init__()
+        super().__init__()
         # 构建网络层
         layers = []
         # 添加输入层到第一个隐藏层

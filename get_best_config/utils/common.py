@@ -3,7 +3,7 @@
 """
 
 
-def ceil_div(dividend: int, divisor:int) -> int:
+def ceil_div(dividend: int, divisor: int) -> int:
     """
     向上取整除法
 
@@ -11,7 +11,7 @@ def ceil_div(dividend: int, divisor:int) -> int:
         dividend: 被除数
         divisor: 除数（必须为正数）
     """
-    if divisor <=0:
+    if divisor <= 0:
         raise ValueError("divisor must be positive")
     return (dividend + divisor - 1) // divisor
 
@@ -28,4 +28,4 @@ def round_up(value: int, alignment: int) -> int:
         raise ValueError("alignment must be positive")
     if value == 0:
         return 0
-    return ((value + alignment -1) // alignment) * alignment
+    return ((value + alignment - 1) // alignment) * alignment
