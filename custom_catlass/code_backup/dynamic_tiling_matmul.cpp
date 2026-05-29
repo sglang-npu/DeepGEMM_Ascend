@@ -41,19 +41,19 @@ bool ParseArgs(int argc, const char **argv, TilingParams &tilingParams, RunMode 
 
     switch (runMode) {
         case RunMode::OriginCatlass:
-            // program, device, run_mode==0, m, n, k, layoutTagA, layoutTagB, checkRes
+            // program, device, run_mode==0, checkRes, m, n, k, layoutTagA, layoutTagB
             break;
         case RunMode::CustomTiling:
-            // program, device, run_mode==1, m, n, k, layoutTagA, layoutTagB, checkRes, m1, n1, k1
+            // program, device, run_mode==1, checkRes, m, n, k, layoutTagA, layoutTagB, m1, n1, k1
             tilingParams.m1 = std::atoi(argv[9]);
             tilingParams.n1 = std::atoi(argv[10]);
             tilingParams.k1 = std::atoi(argv[11]);
             break;
         case RunMode::OnlinePredict:
-            // program, device, run_mode==2, m, n, k, layoutTagA, layoutTagB, checkRes
+            // program, device, run_mode==2, checkRes, m, n, k, layoutTagA, layoutTagB
             break;
         case RunMode::OfflineCache:
-            // program, device, run_mode==3, m, n, k, layoutTagA, layoutTagB, checkRes
+            // program, device, run_mode==3, checkRes, m, n, k, layoutTagA, layoutTagB
             break;
         default:
             std::cerr << "[DGA] Invalid run mode: " << run_mode << std::endl;
@@ -71,11 +71,14 @@ bool DoTiling(TilingParams &tilingParams, const RunMode &runMode)
     switch (runMode) {
         case RunMode::OriginCatlass:
             DoTilingAndSelectKernel<fp16_t>(tilingParams, platformInfo);
+            tilingSucc = true;
             break;
         case RunMode::CustomTiling:
             SelectKernel<fp16_t>(tilingParams, platformInfo);
+            tilingSucc = true;
             break;
         case RunMode::OnlinePredict:
+            tilingSucc = SelectKernelWithPredictor(tilingParams);
             break;
         case RunMode::OfflineCache:
             tilingSucc = SelectKernelWithCache(tilingParams);
