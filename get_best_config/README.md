@@ -74,10 +74,6 @@ result = config.predict(m=72, n=7392, k=8192)
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `--model-version` | A2 | 模型版本 (A2/A3) |
-| `--selection-method` | greedy | tiling 选择策略 |
-| `--selection-topk` | 10 | TopK 数量 |
-| `--min-tiling` | 60 | 最小 tiling 数量阈值 |
-| `--time-diff-threshold` | 0.3 | 耗时差异阈值 |
 
 ## 工作流程
 
@@ -86,13 +82,6 @@ result = config.predict(m=72, n=7392, k=8192)
 3. 使用 MLP 模型预测每个候选的执行时间
 4. 根据选择策略选取最优 tiling
 5. 回退机制：若模型预测不佳，回退到默认配置
-
-## 回退机制
-
-当以下条件触发时，回退到默认 tiling 配置：
-
-- 候选 tiling 数量 < `min_tiling`
-- 预测时间 > `(1 - time_diff_threshold) × 默认配置预测时间`
 
 ## 依赖
 
