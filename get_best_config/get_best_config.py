@@ -669,8 +669,8 @@ class TilingPredictor:
 
 # ===================== GetBestConfig 类 =====================
 class GetBestConfig:
-    def __init__(self, args: argparse.Namespace):
-        self.args = args
+    def __init__(self):
+        self.args = parse_args()
         print(f"{args.model_path_small}")
         self.predictor_small = TilingPredictor(
             model_path=args.model_path_small,
@@ -756,8 +756,7 @@ class GetBestConfig:
 
 # ===================== main =====================
 def main():
-    args = parse_args()
-    get_best_config = GetBestConfig(args)
+    get_best_config = GetBestConfig()
 
     # 预测任意 M、N、K 的最优 tiling 参数
     best_tiling = get_best_config.predict(m=72, n=7392, k=8192)
