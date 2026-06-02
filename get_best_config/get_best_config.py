@@ -48,7 +48,6 @@ VERSION_CONFIG = {
 def parse_args():
     parser = argparse.ArgumentParser(description="根据shape寻找最优tiling")
 
-    # 模型版本选择（新增）
     parser.add_argument(
         "--model-version",
         type=str,
@@ -211,14 +210,8 @@ class TilingPredictor:
             scaler_path=scaler_path,
             hidden_dims=hidden_dims,
         )
-
-        # 初始化Catlass参数生成器
-        self.catlass_param_generator = CatlassParameter(
-            operator_type=operator_type,
-            layout_tag_a=layout_tag_a,
-            layout_tag_b=layout_tag_b,
-            core_num=core_num,
-        )
+        self.operator_type = operator_type
+        self.core_num = core_num
         self.selection_method = selection_method
         self.selection_topk = selection_topk
         self.selector_seed = selector_seed
@@ -226,7 +219,15 @@ class TilingPredictor:
         self.dbscan_min_samples = dbscan_min_samples
         self.min_tiling = min_tiling
         self.time_diff_threshold = time_diff_threshold
-        # print(f"[TilingPredictor] 初始化完成，模型路径: {model_path}")
+
+    def set_catlass_param_generator(self, layout_tag_a, layout_tag_b):
+        # 初始化Catlass参数生成器
+        self.catlass_param_generator = CatlassParameter(
+            operator_type = self.operator_type,
+            layout_tag_a = layout_tag_a,
+            layout_tag_b = layout_tag_b,
+            core_num = self.core_num,
+        )
 
     def detect_device(self) -> torch.device:
         if torch.cuda.is_available():
@@ -272,9 +273,7 @@ class TilingPredictor:
             raise KeyError(f"scaler文件 {scaler_path} 缺少 mean/std 字段")
 
         mean_arr = scaler_data["mean"].astype(np.float32)
-        # print(f"mean_arr: {mean_arr}")
         std_arr = scaler_data["std"].astype(np.float32)
-        # print(f"std_arr: {std_arr}")
         std_arr = np.where(std_arr < 1e-8, 1.0, std_arr)
         return mean_arr, std_arr
 
@@ -635,6 +634,8 @@ class TilingPredictor:
             n: int,
             k: int,
             tiling: tuple = None,
+            layout_tag_a = 0,
+            layout_tag_b = 1
     ) -> Optional[Dict[str, int]]:
         """
         根据 M、N、K 预测最优的 tiling 参数
@@ -649,6 +650,8 @@ class TilingPredictor:
             如果没有可用参数，返回None
         """
         shape = [m, n, k]
+        # 设置catlass_param_generator的layout
+        self.set_catlass_param_generator(layout_tag_a, layout_tag_b)
 
         best_param, _ = self.predict_best_tiling(
             shape[0],
@@ -712,11 +715,11 @@ class GetBestConfig:
         result = self.matmul_tiling_calculator.calculate(*args)
         # 2.使用训练好的模型寻找最优tiling（包含回退机制）
         if result["operator_type"] == "SmallMatmul":
-            result["predict_tiling"] = self.predictor_small.predict(*shape, result["tiling"])
+            result["predict_tiling"] = self.predictor_small.predict(*shape, result["tiling"], layout_tag_a, layout_tag_b)
         elif result["operator_type"] == "CommonMatmul":
-            result["predict_tiling"] = self.predictor_common.predict(*shape, result["tiling"])
+            result["predict_tiling"] = self.predictor_common.predict(*shape, result["tiling"], layout_tag_a, layout_tag_b)
         elif result["operator_type"] == "PaddingCommonMatmul":
-            result["predict_tiling"] = self.predictor_padding.predict(*shape, result["tiling"])
+            result["predict_tiling"] = self.predictor_padding.predict(*shape, result["tiling"], layout_tag_a, layout_tag_b)
 
         if result.get("predict_tiling") is None:
             result["predict_tiling"] = dict(zip(["m1", "n1", "k1"], result["tiling"]))
@@ -746,6 +749,7 @@ def main():
 
     # 预测任意 M、N、K 的最优 tiling 参数
     best_tiling = get_best_config.predict(m=72, n=7392, k=8192, layout_tag_a=0, layout_tag_b=1)
+    best_tiling = get_best_config.predict(m=1, n=4, k=4, layout_tag_a=0, layout_tag_b=0)
     # 返回: {"m1": 16, "n1": 32, "k1": 64}
 
     if best_tiling:
