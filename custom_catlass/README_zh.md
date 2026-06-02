@@ -50,7 +50,7 @@ export DGA_CACHE_FILE_PATH=<cache_file_path>
 ## 3. 性能采集
 利用CANN中自带的工具msprof进行性能数据收集：
 ```bash
-msprof op ./102_dynamic_optimized_matmul 0 1 1 16 578 2014 0 0 16 64 512
+msprof op --kernel-name="_Z" ./102_dynamic_optimized_matmul 0 1 1 16 578 2014 0 0 16 64 512
 ```
 输出中包含算子名称、算子类型、算子耗时等信息，可自行分析。
 
