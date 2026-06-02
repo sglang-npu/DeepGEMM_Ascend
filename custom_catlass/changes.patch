@@ -639,10 +639,10 @@ index 4e614df..607d3ff 100644
 \ No newline at end of file
 diff --git a/examples/102_dynamic_optimized_matmul/include/predictor.h b/examples/102_dynamic_optimized_matmul/include/predictor.h
 new file mode 100644
-index 0000000..809057a
+index 0000000..70cd0e4
 --- /dev/null
 +++ b/examples/102_dynamic_optimized_matmul/include/predictor.h
-@@ -0,0 +1,218 @@
+@@ -0,0 +1,231 @@
 +/**
 + * This program is free software, you can redistribute it and/or modify.
 + * Copyright (c) 2026 Huawei Technologies Co., Ltd.
@@ -697,7 +697,8 @@ index 0000000..809057a
 +    Predictor(const Predictor&) = delete;
 +    Predictor &operator=(const Predictor&) = delete;
 +
-+    std::vector<uint32_t> UsePredictApi(uint32_t m, uint32_t n, uint32_t k);
++    std::vector<uint32_t> UsePredictApi(
++        uint32_t m, uint32_t n, uint32_t k, uint32_t paddingTagA, uint32_t paddingTagB);
 +    bool ParsePredictRes(PyObject* pResult, std::vector<uint32_t>& predictRes);
 +
 +private:
@@ -793,15 +794,19 @@ index 0000000..809057a
 +    return true;
 +}
 +
-+std::vector<uint32_t> Predictor::UsePredictApi(uint32_t m, uint32_t n, uint32_t k)
++std::vector<uint32_t> Predictor::UsePredictApi(
++    uint32_t m, uint32_t n, uint32_t k, uint32_t layoutTagA, uint32_t layoutTagB
++)
 +{
 +    PyGILState_STATE gstate = PyGILState_Ensure();
 +
 +    // 1. create input tuple
-+    PyObject* pArgs = PyTuple_New(3);
++    PyObject* pArgs = PyTuple_New(5);
 +    PyTuple_SetItem(pArgs, 0, PyLong_FromLong(m));
 +    PyTuple_SetItem(pArgs, 1, PyLong_FromLong(n));
 +    PyTuple_SetItem(pArgs, 2, PyLong_FromLong(k));
++    PyTuple_SetItem(pArgs, 3, PyLong_FromLong(layoutTagA));
++    PyTuple_SetItem(pArgs, 4, PyLong_FromLong(layoutTagB));
 +
 +    // 2. call function
 +    PyObject* pResult = PyObject_CallObject(pMethod_, pArgs);
@@ -833,8 +838,10 @@ index 0000000..809057a
 +    uint32_t m = tilingParams.m;
 +    uint32_t n = tilingParams.n;
 +    uint32_t k = tilingParams.k;
++    uint32_t layoutTagA = static_cast<uint32_t>(tilingParams.layoutTagA);
++    uint32_t layoutTagB = static_cast<uint32_t>(tilingParams.layoutTagB);
 +
-+    auto predictRes = UsePredictApi(m, n, k);
++    auto predictRes = UsePredictApi(m, n, k, layoutTagA, layoutTagB);
 +    if (predictRes.size() != PREDICTOR_PARAM_NAMES.size()) {
 +        std::cerr << "[DGA] [ERROR] predict result size not enough, expect " << PREDICTOR_PARAM_NAMES.size()
 +                  << ", but get " << predictRes.size() << "." << std::endl;
@@ -850,6 +857,12 @@ index 0000000..809057a
 +    tilingParams.paddingTagB = static_cast<uint8_t>(predictRes[5]);
 +    tilingParams.paddingTagC = static_cast<uint8_t>(predictRes[6]);
 +    tilingParams.blockDim = static_cast<uint8_t>(predictRes[7]);
++    tilingParams.swizzleOffset = 3;
++    if (tilingParams.m > tilingParams.n) {
++        tilingParams.swizzleDirection = 0;
++    } else {
++        tilingParams.swizzleDirection = 1;
++    }
 +    tilingParams.tilingKey.SetTilingKey(kernelSerial,
 +        tilingParams.layoutTagA, tilingParams.layoutTagB, tilingParams.layoutTagC,
 +        tilingParams.paddingTagA, tilingParams.paddingTagB, tilingParams.paddingTagC);
