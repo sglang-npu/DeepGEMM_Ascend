@@ -37,7 +37,7 @@ cd ./catlass/output/bin
 ```
 #### 在线预测
 ```bash
-export $PYTHONPATH=<get_best_config_path>:$PYTHONPATH
+export PYTHONPATH=<get_best_config_path>:$PYTHONPATH
 ./102_dynamic_optimized_matmul 0 2 1 16 578 2014 0 0
 ```
 #### 离线缓存
