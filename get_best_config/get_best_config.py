@@ -671,7 +671,6 @@ class TilingPredictor:
 class GetBestConfig:
     def __init__(self):
         self.args = parse_args()
-        print(f"{args.model_path_small}")
         self.predictor_small = TilingPredictor(
             model_path=args.model_path_small,
             scaler_path=args.scaler_path_small,
@@ -685,7 +684,6 @@ class GetBestConfig:
             layout_tag_a=0,
             layout_tag_b=0,
         )
-        print(f"{args.model_path_common}")
         self.predictor_common = TilingPredictor(
             model_path=args.model_path_common,
             scaler_path=args.scaler_path_common,
@@ -699,7 +697,6 @@ class GetBestConfig:
             layout_tag_a=0,
             layout_tag_b=1,
         )
-        print(f"{args.model_path_padding}")
         self.predictor_padding = TilingPredictor(
             model_path=args.model_path_padding,
             scaler_path=args.scaler_path_padding,
