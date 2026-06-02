@@ -639,10 +639,10 @@ index 4e614df..607d3ff 100644
 \ No newline at end of file
 diff --git a/examples/102_dynamic_optimized_matmul/include/predictor.h b/examples/102_dynamic_optimized_matmul/include/predictor.h
 new file mode 100644
-index 0000000..3f7e966
+index 0000000..809057a
 --- /dev/null
 +++ b/examples/102_dynamic_optimized_matmul/include/predictor.h
-@@ -0,0 +1,215 @@
+@@ -0,0 +1,218 @@
 +/**
 + * This program is free software, you can redistribute it and/or modify.
 + * Copyright (c) 2026 Huawei Technologies Co., Ltd.
@@ -853,6 +853,9 @@ index 0000000..3f7e966
 +    tilingParams.tilingKey.SetTilingKey(kernelSerial,
 +        tilingParams.layoutTagA, tilingParams.layoutTagB, tilingParams.layoutTagC,
 +        tilingParams.paddingTagA, tilingParams.paddingTagB, tilingParams.paddingTagC);
++    std::cout << "[DGA] [INFO] Predict result: mTile = " << static_cast<uint32_t>(tilingParams.m1);
++    std::cout << ", nTile = " << static_cast<uint32_t>(tilingParams.n1);
++    std::cout << ", kTile = " << static_cast<uint32_t>(tilingParams.k1) << std::endl;
 +    return true;
 +}
 +} // namespace CatlassTiling
