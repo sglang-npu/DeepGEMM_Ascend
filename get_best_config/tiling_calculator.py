@@ -22,7 +22,7 @@ class LayoutTag(IntEnum):
 class PlatformInfo:
     """平台信息，默认值来自 platform_info.h"""
     def __init__(self):
-        self.coreNum = 24          # AI Core 数量
+        self.coreNum = 20          # AI Core 数量
         self.ubSize = 192 * 1024   # UB 大小 (字节)
         self.l1Size = 512 * 1024   # L1 大小 (字节)
         self.l0ASize = 64 * 1024   # L0 A 大小 (字节)
