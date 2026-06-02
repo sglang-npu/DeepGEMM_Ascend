@@ -670,8 +670,7 @@ class TilingPredictor:
 # ===================== GetBestConfig 类 =====================
 class GetBestConfig:
     def __init__(self):
-        self.args = parse_args()
-        print(f"{args.model_path_small}")
+        args = parse_args()
         self.predictor_small = TilingPredictor(
             model_path=args.model_path_small,
             scaler_path=args.scaler_path_small,
@@ -685,7 +684,6 @@ class GetBestConfig:
             layout_tag_a=0,
             layout_tag_b=0,
         )
-        print(f"{args.model_path_common}")
         self.predictor_common = TilingPredictor(
             model_path=args.model_path_common,
             scaler_path=args.scaler_path_common,
@@ -699,7 +697,6 @@ class GetBestConfig:
             layout_tag_a=0,
             layout_tag_b=1,
         )
-        print(f"{args.model_path_padding}")
         self.predictor_padding = TilingPredictor(
             model_path=args.model_path_padding,
             scaler_path=args.scaler_path_padding,
@@ -716,11 +713,8 @@ class GetBestConfig:
 
         self.matmul_tiling_calculator = MatmulTilingCalculator()
 
-    def predict(self, m, n, k):
+    def predict(self, m, n, k, layout_tag_a, layout_tag_b):
         shape = [m, n, k]
-        # 取layout, 不同算子的predictor的layout保持一致, 例如取small
-        layout_tag_a = self.predictor_small.catlass_param_generator.layout_tag_a
-        layout_tag_b = self.predictor_small.catlass_param_generator.layout_tag_b
         args = shape + [layout_tag_a, layout_tag_b]  # 合并参数
         # 1.计算catlass的tiling和kerneltype
         result = self.matmul_tiling_calculator.calculate(*args)
@@ -759,7 +753,7 @@ def main():
     get_best_config = GetBestConfig()
 
     # 预测任意 M、N、K 的最优 tiling 参数
-    best_tiling = get_best_config.predict(m=72, n=7392, k=8192)
+    best_tiling = get_best_config.predict(m=72, n=7392, k=8192, layout_tag_a=0, layout_tag_b=1)
     # 返回: {"m1": 16, "n1": 32, "k1": 64}
 
     if best_tiling:
