@@ -670,7 +670,7 @@ class TilingPredictor:
 # ===================== GetBestConfig 类 =====================
 class GetBestConfig:
     def __init__(self):
-        self.args = parse_args()
+        args = parse_args()
         self.predictor_small = TilingPredictor(
             model_path=args.model_path_small,
             scaler_path=args.scaler_path_small,
