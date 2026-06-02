@@ -4,7 +4,7 @@
 
 ## 概述
 
-本模块使用训练好的 MLP 模型预测给定矩阵维度 (M, N, K) 下的最优 tiling 参数 (m1, n1, k1)，以优化矩阵乘法算子的执行性能。
+本模块使用训练好的 MLP 模型预测给定矩阵维度 (M, N, K, layout_tag_a, layout_tag_b) 下的最优 tiling 参数 (m1, n1, k1)，以优化矩阵乘法算子的执行性能。
 
 ## 模块结构
 
@@ -59,7 +59,7 @@ args.model_version = "A2"  # 选择模型版本
 config = GetBestConfig(args)
 
 # 预测最优配置
-result = config.predict(m=72, n=7392, k=8192)
+result = config.predict(m=72, n=7392, k=8192, layout_tag_a=0, layout_tag_b=1)
 
 # 返回结果包含：
 # - predict_tiling: {"m1": x, "n1": y, "k1": z} 最优 tiling

@@ -193,8 +193,6 @@ class TilingPredictor:
             dbscan_min_samples: int = 2,
             min_tiling: int = 40,
             time_diff_threshold: float = 0.05,
-            layout_tag_a: int = 0,
-            layout_tag_b: int = 1,
     ):
         """
         初始化Tiling预测器
@@ -681,8 +679,6 @@ class GetBestConfig:
             time_diff_threshold=args.time_diff_threshold,
             selection_method=args.selection_method,
             selection_topk=args.selection_topk,
-            layout_tag_a=0,
-            layout_tag_b=0,
         )
         self.predictor_common = TilingPredictor(
             model_path=args.model_path_common,
@@ -694,8 +690,6 @@ class GetBestConfig:
             time_diff_threshold=args.time_diff_threshold,
             selection_method=args.selection_method,
             selection_topk=args.selection_topk,
-            layout_tag_a=0,
-            layout_tag_b=1,
         )
         self.predictor_padding = TilingPredictor(
             model_path=args.model_path_padding,
@@ -707,8 +701,6 @@ class GetBestConfig:
             time_diff_threshold=args.time_diff_threshold,
             selection_method=args.selection_method,
             selection_topk=args.selection_topk,
-            layout_tag_a=0,
-            layout_tag_b=1,
         )
 
         self.matmul_tiling_calculator = MatmulTilingCalculator()
