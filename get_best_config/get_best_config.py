@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
+import os
 
 from catlass_parameter import CatlassParameter
 from model import TimePredictMLP
@@ -144,7 +145,7 @@ def parse_args():
     # 若指定了版本，则覆盖路径和隐藏层配置
     if args.model_version is not None:
         ver = args.model_version
-        prefix = f"./model_{ver}/"
+        prefix = os.path.dirname(__file__) + f"/model_{ver}/"
         args.model_path_small = prefix + "best_mlp_model_small.pth"
         args.scaler_path_small = prefix + "scaler_small.npz"
         args.model_path_common = prefix + "best_mlp_model_common.pth"
@@ -230,10 +231,10 @@ class TilingPredictor:
         )
 
     def detect_device(self) -> torch.device:
-        if torch.cuda.is_available():
-            return torch.device("cuda:0")
-        if hasattr(torch, "npu") and torch.npu.is_available():
-            return torch.device("npu:0")
+        # if torch.cuda.is_available():
+        #     return torch.device("cuda:0")
+        # if hasattr(torch, "npu") and torch.npu.is_available():
+        #     return torch.device("npu:0")
         return torch.device("cpu")
 
     def load_torch_predictor(self, model_path: str, scaler_path: str, hidden_dims: List[int]):

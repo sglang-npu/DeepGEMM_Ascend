@@ -42,11 +42,6 @@ MLP 神经网络模型，输入特征 (M, N, K, m_tile, n_tile, k_tile)，输出
 
 ## 使用方式
 
-### 命令行调用
-
-```bash
-python get_best_config.py --model-version A2
-```
 
 ### Python API 调用
 
