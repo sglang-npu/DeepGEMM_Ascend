@@ -81,7 +81,7 @@ def parse_args():
         "--time-diff-threshold",
         type=float,
         default=0.06,
-        help="耗时差异阈值（0.0-1.0），如果模型预测的最优tiling耗时 > (1-threshold)*catlass原生tiling耗时，将回退到原生tiling (默认: 0.05，即5%)"
+        help="耗时差异阈值（0.0-1.0），如果模型预测的最优tiling耗时 > (1-threshold)*catlass原生tiling耗时，将回退到原生tiling (默认: 0.06，即6%)"
     )
 
     # -------------------------- 模型相关信息 --------------------------
