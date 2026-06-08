@@ -75,13 +75,13 @@ def parse_args():
         "--min-tiling",
         type=int,
         default=60,
-        help="最小tiling数量阈值，如果筛选出的tiling数量不足此值，将回退到catlass原生计算方式 (默认: 40)"
+        help="最小tiling数量阈值，如果筛选出的tiling数量不足此值，将回退到catlass原生计算方式 (默认: 60)"
     )
     parser.add_argument(
         "--time-diff-threshold",
         type=float,
-        default=0.3,
-        help="耗时差异阈值（0.0-1.0），如果模型预测的最优tiling耗时 > (1-threshold)*catlass原生tiling耗时，将回退到原生tiling (默认: 0.05，即5%)"
+        default=0.03,
+        help="耗时差异阈值（0.0-1.0），如果模型预测的最优tiling耗时 > (1-threshold)*catlass原生tiling耗时，将回退到原生tiling (默认: 0.03，即3%)"
     )
 
     # -------------------------- 模型相关信息 --------------------------
@@ -742,6 +742,9 @@ class GetBestConfig:
                 result["paddingTagB"],
                 result["splitkFactor"],
             )
+        result['m1'] = result['predict_tiling']['m1']
+        result['n1'] = result['predict_tiling']['n1']
+        result['k1'] = result['predict_tiling']['k1']
         return result
 
 # ===================== main =====================
