@@ -13,22 +13,130 @@
 #include "catlass/layout/layout.hpp"
 #include "dynamic_optimized_matmul.h"
 
-static void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k,
-    LayoutTag layoutTagA, LayoutTag layoutTagB, PlatformInfo &platformInfo,
-    uint32_t checkRes = 0, uint32_t m1 = 0, uint32_t n1 = 0, uint32_t k1 = 0)
+enum class RunMode : uint32_t {
+    OriginCatlass = 0,
+    CustomTiling = 1,
+    OnlinePredict = 2,
+    OfflineCache = 3
+};
+
+bool ParseArgs(int argc, const char **argv, TilingParams &tilingParams, RunMode &runMode, bool &checkRes)
 {
+    if (argc < 9) {
+        std::cerr << "Wrong Usage! Please check the arguments." << std::endl;
+        return false;
+    }
+    uint32_t run_mode = std::atoi(argv[2]);
+    runMode = static_cast<RunMode>(run_mode);
+    uint32_t check_res = std::atoi(argv[3]);
+    checkRes = (check_res != 0);
+
+    uint32_t m = std::atoi(argv[4]);
+    uint32_t n = std::atoi(argv[5]);
+    uint32_t k = std::atoi(argv[6]);
+    LayoutTag layoutTagA = static_cast<LayoutTag>(std::atoi(argv[7]));
+    LayoutTag layoutTagB = static_cast<LayoutTag>(std::atoi(argv[8]));
     LayoutTag layoutTagC = LayoutTag::TagRowMajor;
-    TilingParams tilingParams{m, n, k, layoutTagA, layoutTagB, layoutTagC};
-    if (m1 == 0 || n1 == 0 || k1 == 0) {
-        DoTilingAndSelectKernel<fp16_t>(tilingParams, platformInfo);
-    } else {
-        tilingParams.m1 = m1;
-        tilingParams.n1 = n1;
-        tilingParams.k1 = k1;
-        DoTilingAndSelectKernelV2<fp16_t>(tilingParams, platformInfo);
+    tilingParams.SetParams(m, n, k, layoutTagA, layoutTagB, layoutTagC);
+
+    switch (runMode) {
+        case RunMode::OriginCatlass:
+            // program, device, run_mode==0, checkRes, m, n, k, layoutTagA, layoutTagB
+            break;
+        case RunMode::CustomTiling:
+            // program, device, run_mode==1, checkRes, m, n, k, layoutTagA, layoutTagB, m1, n1, k1
+            tilingParams.m1 = std::atoi(argv[9]);
+            tilingParams.n1 = std::atoi(argv[10]);
+            tilingParams.k1 = std::atoi(argv[11]);
+            break;
+        case RunMode::OnlinePredict:
+            // program, device, run_mode==2, checkRes, m, n, k, layoutTagA, layoutTagB
+            break;
+        case RunMode::OfflineCache:
+            // program, device, run_mode==3, checkRes, m, n, k, layoutTagA, layoutTagB
+            break;
+        default:
+            std::cerr << "[DGA] Invalid run mode: " << run_mode << std::endl;
+            return false;
+    }
+    return true;
+
+}
+
+bool DoTiling(TilingParams &tilingParams, const RunMode &runMode)
+{
+    PlatformInfo platformInfo;
+    bool tilingSucc = false;
+
+    switch (runMode) {
+        case RunMode::OriginCatlass:
+            DoTilingAndSelectKernel<fp16_t>(tilingParams, platformInfo);
+            tilingSucc = true;
+            break;
+        case RunMode::CustomTiling:
+            SelectKernel<fp16_t>(tilingParams, platformInfo);
+            tilingSucc = true;
+            break;
+        case RunMode::OnlinePredict:
+            tilingSucc = SelectKernelWithPredictor(tilingParams);
+            break;
+        case RunMode::OfflineCache:
+            tilingSucc = SelectKernelWithCache(tilingParams);
+            break;
+        default:
+            break;
     }
     PrintTilingParams<fp16_t>(tilingParams, platformInfo);
+    return tilingSucc;
+}
 
+void CheckRes(TilingParams &tilingParams, std::vector<fp16_t> &hostA, std::vector<fp16_t> &hostB, std::vector<fp16_t> &hostC)
+{
+    std::cout << "[DGA] Check result... " << std::endl;
+    uint32_t m = tilingParams.m;
+    uint32_t n = tilingParams.n;
+    uint32_t k = tilingParams.k;
+    LayoutTag layoutTagA = static_cast<LayoutTag>(tilingParams.layoutTagA);
+    LayoutTag layoutTagB = static_cast<LayoutTag>(tilingParams.layoutTagB);
+    LayoutTag layoutTagC = static_cast<LayoutTag>(tilingParams.layoutTagC);
+    size_t lenC = static_cast<size_t>(m) * n;
+
+    std::vector<float> hostGolden(lenC);
+    Catlass::GemmCoord problemShape{m, n, k};
+    if (layoutTagA == LayoutTag::TagRowMajor && layoutTagB == LayoutTag::TagRowMajor) {
+        Catlass::layout::RowMajor layoutA{m, k};
+        Catlass::layout::RowMajor layoutB{k, n};
+        Catlass::layout::RowMajor layoutC{m, n};
+        Catlass::golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
+    } else if (layoutTagA == LayoutTag::TagRowMajor && layoutTagB == LayoutTag::TagColumnMajor) {
+        Catlass::layout::RowMajor layoutA{m, k};
+        Catlass::layout::ColumnMajor layoutB{k, n};
+        Catlass::layout::RowMajor layoutC{m, n};
+        Catlass::golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
+    } else if (layoutTagA == LayoutTag::TagColumnMajor && layoutTagB == LayoutTag::TagRowMajor) {
+        Catlass::layout::ColumnMajor layoutA{m, k};
+        Catlass::layout::RowMajor layoutB{k, n};
+        Catlass::layout::RowMajor layoutC{m, n};
+        Catlass::golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
+    } else {
+        Catlass::layout::ColumnMajor layoutA{m, k};
+        Catlass::layout::ColumnMajor layoutB{k, n};
+        Catlass::layout::RowMajor layoutC{m, n};
+        Catlass::golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
+    }
+    std::vector<uint64_t> errorIndices = Catlass::golden::CompareData(hostC, hostGolden, k);
+    if (errorIndices.empty()) {
+        std::cout << "Compare success." << std::endl;
+    } else {
+        std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
+    }
+}
+
+void RunCompute(aclrtStream &stream, TilingParams &tilingParams, const RunMode &runMode, bool checkRes)
+{
+    uint32_t m = tilingParams.m;
+    uint32_t n = tilingParams.n;
+    uint32_t k = tilingParams.k;
     size_t lenA = static_cast<size_t>(m) * k;
     size_t lenB = static_cast<size_t>(k) * n;
     size_t lenC = static_cast<size_t>(m) * n;
@@ -71,37 +179,8 @@ static void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k,
 
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, dC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
-    std::cout << "Check result: " << checkRes << std::endl;
-    if (checkRes == 1) {
-        std::vector<float> hostGolden(lenC);
-        Catlass::GemmCoord problemShape{m, n, k};
-        if (layoutTagA == LayoutTag::TagRowMajor && layoutTagB == LayoutTag::TagRowMajor) {
-            Catlass::layout::RowMajor layoutA{m, k};
-            Catlass::layout::RowMajor layoutB{k, n};
-            Catlass::layout::RowMajor layoutC{m, n};
-            Catlass::golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
-        } else if (layoutTagA == LayoutTag::TagRowMajor && layoutTagB == LayoutTag::TagColumnMajor) {
-            Catlass::layout::RowMajor layoutA{m, k};
-            Catlass::layout::ColumnMajor layoutB{k, n};
-            Catlass::layout::RowMajor layoutC{m, n};
-            Catlass::golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
-        } else if (layoutTagA == LayoutTag::TagColumnMajor && layoutTagB == LayoutTag::TagRowMajor) {
-            Catlass::layout::ColumnMajor layoutA{m, k};
-            Catlass::layout::RowMajor layoutB{k, n};
-            Catlass::layout::RowMajor layoutC{m, n};
-            Catlass::golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
-        } else {
-            Catlass::layout::ColumnMajor layoutA{m, k};
-            Catlass::layout::ColumnMajor layoutB{k, n};
-            Catlass::layout::RowMajor layoutC{m, n};
-            Catlass::golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
-        }
-        std::vector<uint64_t> errorIndices = Catlass::golden::CompareData(hostC, hostGolden, k);
-        if (errorIndices.empty()) {
-            std::cout << "Compare success." << std::endl;
-        } else {
-            std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
-        }
+    if (checkRes) {
+        CheckRes(tilingParams, hostA, hostB, hostC);
     }
 
     ACL_CHECK(aclrtFree(dA));
@@ -121,28 +200,18 @@ int main(int argc, const char **argv)
     aclrtStream stream;
     ACL_CHECK(aclrtCreateStream(&stream));
 
-    PlatformInfo platformInfo;
-
-    uint32_t run_mode = std::atoi(argv[2]);
-
-    uint32_t m = std::atoi(argv[3]);
-    uint32_t n = std::atoi(argv[4]);
-    uint32_t k = std::atoi(argv[5]);
-    LayoutTag layoutTagA = static_cast<LayoutTag>(std::atoi(argv[6]));
-    LayoutTag layoutTagB = static_cast<LayoutTag>(std::atoi(argv[7]));
-    uint32_t checkRes = std::atoi(argv[8]);
-    if (run_mode == 0) {
-        // program, device, run_mode==0, m, n, k, layoutTagA, layoutTagB, checkRes
-        Run(stream, m, n, k, layoutTagA, layoutTagB, platformInfo, checkRes);
-    } else if (run_mode == 1) {
-        // program, device, run_mode==1, m, n, k, layoutTagA, layoutTagB, m1, n1, k1, checkRes
-        uint32_t m1 = std::atoi(argv[9]);
-        uint32_t n1 = std::atoi(argv[10]);
-        uint32_t k1 = std::atoi(argv[11]);
-        Run(stream, m, n, k, layoutTagA, layoutTagB, platformInfo, checkRes, m1, n1, k1);
-    } else {
-        std::cerr << "Invalid run mode: " << run_mode << std::endl;
+    TilingParams tilingParams;
+    RunMode runMode;
+    bool checkRes;
+    if (!ParseArgs(argc, argv, tilingParams, runMode, checkRes)) {
+        std::cerr << "[DGA] Parse arguments failed." << std::endl;
+        return -1;
     }
+    if (!DoTiling(tilingParams, runMode)) {
+        std::cerr << "[DGA] Get tiling params failed." << std::endl;
+        return -1;
+    }
+    RunCompute(stream, tilingParams, runMode, checkRes);
 
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(deviceId));
