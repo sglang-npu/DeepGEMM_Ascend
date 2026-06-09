@@ -731,7 +731,7 @@ class GetBestConfig:
                 for k, v in result["predict_tiling"].items()
                 if k in mapping
             }
-            result["block_dim"] = self.matmul_tiling_calculator.calculate_block_dim(
+            result["blockDim"] = self.matmul_tiling_calculator.calculate_block_dim(
                 m, n, k,
                 result["predict_tiling"]["m1"],
                 result["predict_tiling"]["n1"],
