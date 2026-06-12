@@ -81,6 +81,7 @@ class TestTimePredictMLPForward(unittest.TestCase):
 
     def test_forward_single_sample(self):
         model = TimePredictMLP(input_dim=6, hidden_dims=[64, 32])
+        model.eval()
         x = torch.randn(1, 6)
         output = model(x)
         self.assertEqual(output.shape, (1, 1))
@@ -105,12 +106,14 @@ class TestTimePredictMLPForward(unittest.TestCase):
 
     def test_forward_output_is_float(self):
         model = TimePredictMLP(input_dim=6, hidden_dims=[64, 32])
+        model.eval()
         x = torch.randn(1, 6)
         output = model(x)
         self.assertEqual(output.dtype, torch.float32)
 
     def test_forward_positive_time_prediction(self):
         model = TimePredictMLP(input_dim=6, hidden_dims=[64, 32])
+        model.eval()
         x = torch.randn(10, 6)
         output = model(x)
         self.assertIsInstance(output.item() if output.numel() == 1 else output[0].item(), float)
