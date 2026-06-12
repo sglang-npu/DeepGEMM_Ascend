@@ -19,6 +19,20 @@ from get_best_config import (
     EXTENDED_FEATURES,
     VERSION_CONFIG,
 )
+from model import TimePredictMLP
+
+
+def _create_test_model(model_path, hidden_dims=[64, 32]):
+    """Helper function to create a proper TimePredictMLP model for testing."""
+    model = TimePredictMLP(input_dim=6, hidden_dims=hidden_dims)
+    torch.save(model.state_dict(), model_path)
+
+
+def _create_test_scaler(scaler_path):
+    """Helper function to create a test scaler file."""
+    mean = np.zeros(6, dtype=np.float32)
+    std = np.ones(6, dtype=np.float32)
+    np.savez(scaler_path, mean=mean, std=std)
 
 
 class TestParseHiddenDims(unittest.TestCase):
@@ -84,12 +98,8 @@ class TestTilingPredictorInit(unittest.TestCase):
         self.model_path = os.path.join(self.temp_dir, "model.pth")
         self.scaler_path = os.path.join(self.temp_dir, "scaler.npz")
 
-        model = torch.nn.Linear(6, 1)
-        torch.save(model.state_dict(), self.model_path)
-
-        mean = np.zeros(6, dtype=np.float32)
-        std = np.ones(6, dtype=np.float32)
-        np.savez(self.scaler_path, mean=mean, std=std)
+        _create_test_model(self.model_path)
+        _create_test_scaler(self.scaler_path)
 
     def tearDown(self):
         import shutil
@@ -170,8 +180,7 @@ class TestTilingPredictorLoadScaler(unittest.TestCase):
         np.savez(self.scaler_path, mean=mean, std=std)
 
         self.model_path = os.path.join(self.temp_dir, "model.pth")
-        model = torch.nn.Linear(6, 1)
-        torch.save(model.state_dict(), self.model_path)
+        _create_test_model(self.model_path)
 
     def tearDown(self):
         import shutil
@@ -219,12 +228,8 @@ class TestTilingPredictorBuildFeatureMatrix(unittest.TestCase):
         self.model_path = os.path.join(self.temp_dir, "model.pth")
         self.scaler_path = os.path.join(self.temp_dir, "scaler.npz")
 
-        model = torch.nn.Linear(6, 1)
-        torch.save(model.state_dict(), self.model_path)
-
-        mean = np.zeros(6, dtype=np.float32)
-        std = np.ones(6, dtype=np.float32)
-        np.savez(self.scaler_path, mean=mean, std=std)
+        _create_test_model(self.model_path)
+        _create_test_scaler(self.scaler_path)
 
         self.predictor = TilingPredictor(
             model_path=self.model_path,
@@ -270,12 +275,8 @@ class TestTilingPredictorSelectTilingStrategy(unittest.TestCase):
         self.model_path = os.path.join(self.temp_dir, "model.pth")
         self.scaler_path = os.path.join(self.temp_dir, "scaler.npz")
 
-        model = torch.nn.Linear(6, 1)
-        torch.save(model.state_dict(), self.model_path)
-
-        mean = np.zeros(6, dtype=np.float32)
-        std = np.ones(6, dtype=np.float32)
-        np.savez(self.scaler_path, mean=mean, std=std)
+        _create_test_model(self.model_path)
+        _create_test_scaler(self.scaler_path)
 
         self.predictor = TilingPredictor(
             model_path=self.model_path,
@@ -331,9 +332,8 @@ class TestTilingPredictorPredictBatch(unittest.TestCase):
         self.model_path = os.path.join(self.temp_dir, "model.pth")
         self.scaler_path = os.path.join(self.temp_dir, "scaler.npz")
 
-        mean = np.zeros(6, dtype=np.float32)
-        std = np.ones(6, dtype=np.float32)
-        np.savez(self.scaler_path, mean=mean, std=std)
+        _create_test_model(self.model_path)
+        _create_test_scaler(self.scaler_path)
 
         self.predictor = TilingPredictor(
             model_path=self.model_path,
@@ -375,12 +375,8 @@ class TestTilingPredictorDetectDevice(unittest.TestCase):
         self.model_path = os.path.join(self.temp_dir, "model.pth")
         self.scaler_path = os.path.join(self.temp_dir, "scaler.npz")
 
-        model = torch.nn.Linear(6, 1)
-        torch.save(model.state_dict(), self.model_path)
-
-        mean = np.zeros(6, dtype=np.float32)
-        std = np.ones(6, dtype=np.float32)
-        np.savez(self.scaler_path, mean=mean, std=std)
+        _create_test_model(self.model_path)
+        _create_test_scaler(self.scaler_path)
 
         self.predictor = TilingPredictor(
             model_path=self.model_path,
@@ -405,12 +401,8 @@ class TestTilingPredictorSetCatlassParamGenerator(unittest.TestCase):
         self.model_path = os.path.join(self.temp_dir, "model.pth")
         self.scaler_path = os.path.join(self.temp_dir, "scaler.npz")
 
-        model = torch.nn.Linear(6, 1)
-        torch.save(model.state_dict(), self.model_path)
-
-        mean = np.zeros(6, dtype=np.float32)
-        std = np.ones(6, dtype=np.float32)
-        np.savez(self.scaler_path, mean=mean, std=std)
+        _create_test_model(self.model_path)
+        _create_test_scaler(self.scaler_path)
 
         self.predictor = TilingPredictor(
             model_path=self.model_path,
