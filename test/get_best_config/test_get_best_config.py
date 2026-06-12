@@ -2,14 +2,17 @@
 Unit tests for get_best_config.py
 """
 
-import unittest
-import sys
 import os
+import sys
+import unittest
 import tempfile
 import numpy as np
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "get_best_config"))
+_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_get_best_config_path = os.path.join(_project_root, "get_best_config")
+if _get_best_config_path not in sys.path:
+    sys.path.insert(0, _get_best_config_path)
 
 import torch
 from get_best_config import (

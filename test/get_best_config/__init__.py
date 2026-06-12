@@ -1,30 +1,8 @@
 """
 Unit tests package for get_best_config module.
+
+Run tests using:
+    python -m unittest discover -s test/get_best_config -p "test_*.py"
+    or
+    python test/get_best_config/run_tests.py
 """
-
-from .test_utils_common import *
-from .test_padding_calculator import *
-from .test_tiling_calculator import *
-from .test_catlass_parameter import *
-from .test_model import *
-from .test_get_best_config import *
-
-__all__ = [
-    "TestCeilDiv",
-    "TestRoundUp",
-    "TestPaddingTag",
-    "TestEstimateBandwidth",
-    "TestCalcPaddingTags",
-    "TestPlatformInfo",
-    "TestLayoutTag",
-    "TestOperatorType",
-    "TestMatmulTilingCalculator",
-    "TestCatlassParameterInit",
-    "TestCatlassParameterGrid",
-    "TestCatlassParameterConstraints",
-    "TestCatlassParameterFilter",
-    "TestTimePredictMLPInit",
-    "TestTimePredictMLPForward",
-    "TestParseHiddenDims",
-    "TestTilingPredictorInit",
-]

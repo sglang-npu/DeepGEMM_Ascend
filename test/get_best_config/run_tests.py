@@ -12,8 +12,6 @@ import os
 import sys
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "get_best_config"))
-
 TEST_MODULES = {
     "utils": "test_utils_common",
     "padding": "test_padding_calculator",
